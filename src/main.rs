@@ -65,6 +65,8 @@ async fn main() -> Result<(), anyhow::Error> {
             String::from("Filecoin"),
             String::from("Microsoft"),
             String::from("Apple"),
+            String::from("Bitcoin"),
+            String::from("elonmusk"),
         ];
 
         // Spawn a new task to handle the operations on the subscription list
@@ -174,7 +176,9 @@ async fn main() -> Result<(), anyhow::Error> {
                                 "type": "article",
                                 "embed": {
                                     "url": tweet_url,
-                                    "image": usr.profile_image_url,
+                                    "image": {
+                                        "url": usr.profile_image_url
+                                    },
                                     "title": usr.name,
                                     "description":"Has tweeted!",
                                     "provider": {
