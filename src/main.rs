@@ -63,6 +63,8 @@ async fn main() -> Result<(), anyhow::Error> {
             String::from("Polkadot"),
             String::from("Cardano"),
             String::from("Filecoin"),
+            String::from("Microsoft"),
+            String::from("Apple"),
         ];
 
         // Spawn a new task to handle the operations on the subscription list
@@ -86,7 +88,10 @@ async fn main() -> Result<(), anyhow::Error> {
         for handle in subscriptions {
             let mut search = egg_mode::user::search(handle, &token);
             match search.try_next().await {
-                Ok(Some(u)) => ids.push(u.id),
+                Ok(Some(u)) => {
+                    println!("Found twitter user {:?}", u.id);
+                    ids.push(u.id)
+                }
                 Err(e) => log::error!("Failed to search {}", e),
                 _ => {}
             }
@@ -98,17 +103,21 @@ async fn main() -> Result<(), anyhow::Error> {
             .start(&token)
             .try_for_each(|m| {
                 if let StreamMessage::Tweet(tweet) = m {
-                    let discord_tx_cloned = Arc::clone(&discord_tx);
-                    let _ = tokio::spawn(async move {
-                        discord_tx_cloned
-                            .send(DiscordCommand::SendTweet(tweet.clone()))
-                            .await;
-                        println!(
-                            "Received tweet from {}:\n{}\n",
-                            tweet.user.unwrap().name,
-                            tweet.text
-                        );
-                    });
+                    if let Some(src) = tweet.user.clone() {
+                        if !ids.contains(&src.id) {
+                            let discord_tx_cloned = Arc::clone(&discord_tx);
+                            let _ = tokio::spawn(async move {
+                                discord_tx_cloned
+                                    .send(DiscordCommand::SendTweet(tweet.clone()))
+                                    .await;
+                                println!(
+                                    "Received tweet from {}:\n{}\n",
+                                    tweet.user.unwrap().name,
+                                    tweet.text
+                                );
+                            });
+                        }
+                    }
                 }
                 futures::future::ready(Ok(()))
             })
@@ -154,12 +163,26 @@ async fn main() -> Result<(), anyhow::Error> {
         while let Some(cmd) = discord_rx.recv().await {
             match cmd {
                 DiscordCommand::SendTweet(tweet) => {
-                    let tweet = tweet.source.unwrap();
-
+                    let user_screen_name = tweet.user.as_ref().unwrap().screen_name.clone();
+                    let tweet_url = format!("https://twitter.com/{}/status/{}", user_screen_name, tweet.id);
+                    let usr = tweet.user.unwrap();
                     if let Err(e) = http
                         .send_message(
                             826371481499860993,
-                            &serde_json::json!({ "test": format!("{:?}", tweet) }),
+                            &serde_json::json!({
+                                "content": tweet_url,
+                                "type": "article",
+                                "embed": {
+                                    "url": tweet_url,
+                                    "image": usr.profile_image_url,
+                                    "title": usr.name,
+                                    "description":"Has tweeted!",
+                                    "provider": {
+                                        "url": tweet_url,
+                                        "name": "test"
+                                    }
+                                }
+                            }),
                         )
                         .await
                     {
