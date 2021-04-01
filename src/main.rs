@@ -1,7 +1,7 @@
 use std::{env, sync::Arc};
 
 use anyhow::Context as AnyhowContext;
-use egg_mode::{KeyPair, stream::StreamMessage, tweet::Tweet};
+use egg_mode::{stream::StreamMessage, tweet::Tweet, KeyPair};
 use futures::prelude::*;
 use serenity::model::channel::Message;
 use serenity::{async_trait, framework::standard::Args, model::channel::ReactionType};
@@ -49,7 +49,6 @@ async fn main() -> Result<(), anyhow::Error> {
     // TODO coingecko checks
     // TODO file persistence
 
-    let discord_tx_cloned = Arc::new(discord_tx);
     let _twitter_manager = tokio::spawn(async move {
         println!("Starting connection to twitter..");
         let c_key = env::var("TWITTER_CONSUMER_KEY").expect("TWITTER_CONSUMER_KEY");
@@ -59,11 +58,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
         let consumer = KeyPair::new(c_key, c_secret);
         let access = KeyPair::new(access_key, access_secret);
-        let token = egg_mode::Token::Access {
-            consumer,
-            access,
-        };
-        // Maybe could short circuit app and then reload from config???
+        let token = egg_mode::Token::Access { consumer, access };
         let subscriptions = vec![
             String::from("Polkadot"),
             String::from("Cardano"),
@@ -78,11 +73,8 @@ async fn main() -> Result<(), anyhow::Error> {
                     TwitterCommand::AddTwitterSubscription(handle) => {
                         if !subscriptions_cloned.contains(&handle) {
                             subscriptions_cloned.push(handle);
-                            // panic!("Reboot!");
-
-                            // tokio::spawn(async move {
-                            //     spawn_twitter(handle, token_cloned, discord_tx).await;
-                            // });
+                            // Maybe could short circuit app and then reload from config???
+                            // panic!("Reboot!");                        }
                         }
                     }
                 }
@@ -90,7 +82,7 @@ async fn main() -> Result<(), anyhow::Error> {
         });
 
         // curl 'https://tweeterid.com/ajax.php' -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0' -H 'Accept: */*' -H 'Accept-Language: en-US,en;q=0.5' --compressed -H 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8' -H 'X-Requested-With: XMLHttpRequest' -H 'Origin: https://tweeterid.com' -H 'Connection: keep-alive' -H 'Referer: https://tweeterid.com/' -H 'Sec-Fetch-Dest: empty' -H 'Sec-Fetch-Mode: cors' -H 'Sec-Fetch-Site: same-origin' -H 'Pragma: no-cache' -H 'Cache-Control: no-cache' --data-raw 'input=%40polkadot'
-        let mut ids = vec![1595615893];
+        let mut ids = vec![];
         for handle in subscriptions {
             let mut search = egg_mode::user::search(handle, &token);
             match search.try_next().await {
@@ -99,20 +91,24 @@ async fn main() -> Result<(), anyhow::Error> {
                 _ => {}
             }
         }
-        let discord_tx = Arc::clone(&discord_tx_cloned);
 
+        let discord_tx = Arc::new(discord_tx);
         egg_mode::stream::filter()
             .follow(&ids)
             .start(&token)
             .try_for_each(|m| {
-                // Check the message type and print tweet to console
                 if let StreamMessage::Tweet(tweet) = m {
-                    discord_tx.send(DiscordCommand::SendTweet(tweet.clone()));
-                    println!(
-                        "Received tweet from {}:\n{}\n",
-                        tweet.user.unwrap().name,
-                        tweet.text
-                    );
+                    let discord_tx_cloned = Arc::clone(&discord_tx);
+                    let _ = tokio::spawn(async move {
+                        discord_tx_cloned
+                            .send(DiscordCommand::SendTweet(tweet.clone()))
+                            .await;
+                        println!(
+                            "Received tweet from {}:\n{}\n",
+                            tweet.user.unwrap().name,
+                            tweet.text
+                        );
+                    });
                 }
                 futures::future::ready(Ok(()))
             })
