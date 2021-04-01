@@ -1,7 +1,7 @@
 use std::{env, sync::Arc};
 
 use anyhow::Context as AnyhowContext;
-use egg_mode::{stream::StreamMessage, tweet::Tweet};
+use egg_mode::{KeyPair, stream::StreamMessage, tweet::Tweet};
 use futures::prelude::*;
 use serenity::model::channel::Message;
 use serenity::{async_trait, framework::standard::Args, model::channel::ReactionType};
@@ -52,18 +52,22 @@ async fn main() -> Result<(), anyhow::Error> {
     let discord_tx_cloned = Arc::new(discord_tx);
     let _twitter_manager = tokio::spawn(async move {
         println!("Starting connection to twitter..");
+        let c_key = env::var("TWITTER_CONSUMER_KEY").expect("TWITTER_CONSUMER_KEY");
+        let c_secret = env::var("TWITTER_CONSUMER_SECRET").expect("TWITTER_CONSUMER_SECRET");
+        let access_key = env::var("TWITTER_ACCESS_KEY").expect("TWITTER_ACCESS_KEY");
+        let access_secret = env::var("TWITTER_ACCESS_SECRET").expect("TWITTER_ACCESS_SECRET");
 
-        let con_token = egg_mode::KeyPair::new(
-            env::var("TWITTER_CONSUMER_KEY").expect("TWITTER_CONSUMER_KEY"),
-            env::var("TWITTER_CONSUMER_SECRET").expect("TWITTER_CONSUMER_SECRET"),
-        );
-        let token = egg_mode::auth::bearer_token(&con_token).await.unwrap();
-
+        let consumer = KeyPair::new(c_key, c_secret);
+        let access = KeyPair::new(access_key, access_secret);
+        let token = egg_mode::Token::Access {
+            consumer,
+            access,
+        };
         // Maybe could short circuit app and then reload from config???
         let subscriptions = vec![
-            String::from("polkadot"),
-            String::from("ada"),
-            String::from("filecoin"),
+            String::from("Polkadot"),
+            String::from("Cardano"),
+            String::from("Filecoin"),
         ];
 
         // Spawn a new task to handle the operations on the subscription list
@@ -85,7 +89,8 @@ async fn main() -> Result<(), anyhow::Error> {
             }
         });
 
-        let mut ids = vec![];
+        // curl 'https://tweeterid.com/ajax.php' -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0' -H 'Accept: */*' -H 'Accept-Language: en-US,en;q=0.5' --compressed -H 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8' -H 'X-Requested-With: XMLHttpRequest' -H 'Origin: https://tweeterid.com' -H 'Connection: keep-alive' -H 'Referer: https://tweeterid.com/' -H 'Sec-Fetch-Dest: empty' -H 'Sec-Fetch-Mode: cors' -H 'Sec-Fetch-Site: same-origin' -H 'Pragma: no-cache' -H 'Cache-Control: no-cache' --data-raw 'input=%40polkadot'
+        let mut ids = vec![1595615893];
         for handle in subscriptions {
             let mut search = egg_mode::user::search(handle, &token);
             match search.try_next().await {
