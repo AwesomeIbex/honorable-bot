@@ -2,18 +2,23 @@ use std::{env, sync::Arc};
 
 use anyhow::Context as AnyhowContext;
 use futures::prelude::*;
-use serenity::framework::standard::{
-    macros::{command, group},
-    CommandResult, StandardFramework,
-};
+use serde_json::Value;
 use serenity::model::channel::Message;
 use serenity::{async_trait, framework::standard::Args, model::channel::ReactionType};
 use serenity::{
     client::{Client, Context, EventHandler},
     prelude::TypeMapKey,
 };
+use serenity::{
+    framework::standard::{
+        macros::{command, group},
+        CommandResult, StandardFramework,
+    },
+    http::Http,
+    model::id::ChannelId,
+};
 use tokio::sync::mpsc::{self, Sender};
-use twitter_stream::{Token, TwitterStream};
+use twitter_stream::{Credentials, Token, TwitterStream};
 
 #[group]
 #[commands(add_subscription)]
@@ -24,21 +29,30 @@ struct Handler;
 #[async_trait]
 impl EventHandler for Handler {}
 
-struct CommandSender(Sender<Command>);
+struct CommandSender(Sender<TwitterCommand>);
 impl TypeMapKey for CommandSender {
     type Value = Arc<CommandSender>;
 }
-enum Command {
+enum TwitterCommand {
     AddTwitterSubscription(String),
 }
+enum DiscordCommand {
+    Send(Value),
+}
 #[tokio::main]
-async fn main() {
-    let (tx, mut rx) = mpsc::channel(64);
-    // TODO coingecko checks
+async fn main() -> Result<(), anyhow::Error> {
+    pretty_env_logger::init();
+    dotenv::dotenv().ok();
+    let (cmd_tx, mut cmd_rx) = mpsc::channel(64);
+    let (discord_tx, mut discord_rx) = mpsc::channel(64);
 
-    // Start twitter
+    // discord, twitter, coingecko threads all sending to big command rx with tx's back to dtc
+    // TODO coingecko checks
+    // TODO file persistence
+
+    let discord_tx_cloned = Arc::new(discord_tx);
     let twitter_manager = tokio::spawn(async move {
-        // Establish a connection to the server
+        println!("Starting connection to twitter..");
         let token = Arc::new(Token::from_parts(
             env::var("TWITTER_CONSUMER_KEY").expect("TWITTER_CONSUMER_KEY"),
             env::var("TWITTER_CONSUMER_SECRET").expect("TWITTER_CONSUMER_SECRET"),
@@ -46,17 +60,18 @@ async fn main() {
             env::var("TWITTER_ACCESS_SECRET").expect("TWITTER_ACCESS_SECRET"),
         ));
 
-        let mut subscriptions = vec![String::from("Twitter")];
+        let mut subscriptions = vec![];
         // Start receiving messages
-        while let Some(cmd) = rx.recv().await {
+        while let Some(cmd) = cmd_rx.recv().await {
             match cmd {
-                Command::AddTwitterSubscription(handle) => {
+                TwitterCommand::AddTwitterSubscription(handle) => {
                     let token_cloned = Arc::clone(&token);
+                    let discord_tx = Arc::clone(&discord_tx_cloned);
 
                     if !subscriptions.contains(&handle) {
                         subscriptions.push(handle.clone());
                         tokio::spawn(async move {
-                            spawn_twitter(handle, token_cloned).await;
+                            spawn_twitter(handle, token_cloned, discord_tx).await;
                         });
                     }
                 }
@@ -64,43 +79,73 @@ async fn main() {
         }
     });
 
-    // Send random example
-    let _ = tx
-        .send(Command::AddTwitterSubscription(String::from("Twitter")))
+    println!("Sending random example..");
+    let _ = cmd_tx
+        .send(TwitterCommand::AddTwitterSubscription(String::from(
+            "Polkadot",
+        )))
         .await;
 
-    // Start discord
-    let framework = StandardFramework::new()
-        .configure(|c| c.prefix("~"))
-        .group(&GENERAL_GROUP);
+    let discord_manager = tokio::spawn(async move {
+        println!("Starting connection to discord..");
+        let framework = StandardFramework::new()
+            .configure(|c| c.prefix("~"))
+            .group(&GENERAL_GROUP);
 
-    let token = env::var("DISCORD_TOKEN").expect("discord bot token");
-    let mut client = Client::builder(token)
-        .event_handler(Handler)
-        .framework(framework)
-        .await
-        .expect("Error creating client");
+        let token = env::var("DISCORD_TOKEN").expect("discord bot token");
 
-    {
-        let mut data = client.data.write().await;
-        data.insert::<CommandSender>(Arc::new(CommandSender(tx.clone())));
-    }
+        let mut client = Client::builder(token.clone())
+            .event_handler(Handler)
+            .framework(framework)
+            .await
+            .expect("Error creating client");
+        let http = Http::new_with_token(&token);
 
-    if let Err(why) = client.start().await {
-        println!("An error occurred while running the client: {:?}", why);
-    }
+        {
+            let mut data = client.data.write().await;
+            data.insert::<CommandSender>(Arc::new(CommandSender(cmd_tx.clone())));
+        }
+
+        // spawn this elsewhere
+        let client_manager = tokio::spawn(async move {
+            println!("Creating discord client..");
+            if let Err(why) = client.start().await {
+                println!("An error occurred while running the client: {:?}", why);
+            }
+        });
+
+        while let Some(cmd) = discord_rx.recv().await {
+            match cmd {
+                DiscordCommand::Send(value) => {
+                    if let Err(e) = http.send_message(826371481499860993, &value).await {
+                        log::error!("Error sending message {}", e)
+                    }
+                }
+            }
+        }
+    })
+    .await; //TODO wait
+
+    Ok(())
 }
 
-async fn spawn_twitter(handle: String, token: Arc<Token<String, String>>) {
-    TwitterStream::track(&handle, &token)
+async fn spawn_twitter(
+    handle: String,
+    token: Arc<Token<String, String>>,
+    tx: Arc<Sender<DiscordCommand>>,
+) {
+    if let Err(e) = TwitterStream::track(&handle, &token)
         .try_flatten_stream()
         .try_for_each(|json| {
-            // TODO send message to channel
             println!("{}", json);
+            // TODO send message to channel
+            // tx.send(DiscordCommand::Send(json));
             future::ok(())
         })
         .await
-        .unwrap();
+    {
+        log::error!("Failed to handle twitter stream {}", e)
+    }
 }
 
 #[command]
@@ -127,7 +172,7 @@ async fn add_subscription(ctx: &Context, msg: &Message, mut args: Args) -> Comma
         .expect("Expected CommandSender in TypeMap.");
 
     if let Err(e) =
-        tx.0.send(Command::AddTwitterSubscription(twitter_handle))
+        tx.0.send(TwitterCommand::AddTwitterSubscription(twitter_handle))
             .await
     {
         log::error!("Failed to send add twitter sub {}", e)
