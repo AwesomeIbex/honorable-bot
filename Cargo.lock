@@ -169,6 +169,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "convert_case"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
+
+[[package]]
 name = "core-foundation"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -210,6 +216,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive_more"
+version = "0.99.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f82b1b72f1263f214c0f823371768776c4f5841b942c9883aa8e5ec584fd0ba6"
+dependencies = [
+ "convert_case",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "digest"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -223,6 +241,32 @@ name = "dotenv"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
+
+[[package]]
+name = "egg-mode"
+version = "0.15.0"
+source = "git+https://github.com/egg-mode-rs/egg-mode?branch=master#6b81073eba9c3b123ca0e80bdb5ef61d1758f131"
+dependencies = [
+ "base64 0.13.0",
+ "chrono",
+ "derive_more",
+ "futures",
+ "hmac",
+ "hyper",
+ "hyper-tls",
+ "lazy_static",
+ "mime",
+ "native-tls",
+ "percent-encoding",
+ "rand 0.8.3",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha-1",
+ "thiserror",
+ "tokio",
+ "url",
+]
 
 [[package]]
 name = "encoding_rs"
@@ -463,6 +507,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dotenv",
+ "egg-mode",
  "futures",
  "log",
  "pretty_env_logger",
@@ -1356,6 +1401,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dfed899f0eb03f32ee8c6a0aabdb8a7949659e3466561fc0adf54e26d88c5f4"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "thiserror"
+version = "1.0.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0f4a65597094d4483ddaed134f409b2cb7c1beccf25201a9f73c719254fa98e"
+dependencies = [
+ "thiserror-impl",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "1.0.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7765189610d8241a44529806d6fd1f2e0a08734313a35d5b3a556f92b381f3c0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
