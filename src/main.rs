@@ -1,6 +1,29 @@
+use std::env;
+
+use anyhow::Context as AnyhowContext;
 use futures::prelude::*;
 use tokio::sync::mpsc;
 use twitter_stream::{Token, TwitterStream};
+use serenity::{async_trait, framework::standard::Args, model::channel::ReactionType};
+use serenity::client::{Client, Context, EventHandler};
+use serenity::model::channel::Message;
+use serenity::framework::standard::{
+    StandardFramework,
+    CommandResult,
+    macros::{
+        command,
+        group
+    }
+};
+
+#[group]
+#[commands(add_subscription)]
+struct General;
+
+struct Handler;
+
+#[async_trait]
+impl EventHandler for Handler {}
 
 enum Command {
     AddTwitterSubscription(String),
@@ -37,6 +60,21 @@ async fn main() {
     let _ = tx
         .send(Command::AddTwitterSubscription(String::from("Twitter")))
         .await;
+
+    let framework = StandardFramework::new().configure(|c| c.prefix("~")).group(&GENERAL_GROUP);
+
+    // Login with a bot token from the environment
+    let token = env::var("DISCORD_TOKEN").expect("token");
+    let mut client = Client::builder(token)
+        .event_handler(Handler)
+        .framework(framework)
+        .await
+        .expect("Error creating client");
+
+    // start listening for events by starting a single shard
+    if let Err(why) = client.start().await {
+        println!("An error occurred while running the client: {:?}", why);
+    }
 }
 
 async fn spawn_twitter(handle: String, token: Token<&str, &str>) {
@@ -52,3 +90,31 @@ async fn spawn_twitter(handle: String, token: Token<&str, &str>) {
 }
 
 // TODO command from discord to add to list of twitter streams
+
+
+#[command]
+#[only_in(guilds)]
+#[allowed_roles("administrator")]
+async fn add_subscription(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    if args.is_empty() {
+        msg.reply(ctx, "You need to provide a twitter handle.").await?;
+    } else {
+        msg.react(ctx, ReactionType::Unicode(String::from("✅"))).await?;
+    };
+
+    let twitter_handle = args.single::<String>().context("No twitter handle provided")?;
+
+    // TODO write confirmation
+    // let channel = ctx.cache
+    //     .clone()
+    //     .channel(ctx.channel)
+    //     .await
+    //     .context("Failed to find channel with this id")?;
+    // channel
+    //     .id()
+    //     .say(&ctx, args.rest())
+    //     .await
+    //     .context("Failed to send message to channel")?;
+
+    Ok(())
+}
