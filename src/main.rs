@@ -63,10 +63,6 @@ async fn main() -> Result<(), anyhow::Error> {
             String::from("Polkadot"),
             String::from("Cardano"),
             String::from("Filecoin"),
-            String::from("Microsoft"),
-            String::from("Apple"),
-            String::from("Bitcoin"),
-            String::from("elonmusk"),
         ];
 
         // Spawn a new task to handle the operations on the subscription list
@@ -106,7 +102,7 @@ async fn main() -> Result<(), anyhow::Error> {
             .try_for_each(|m| {
                 if let StreamMessage::Tweet(tweet) = m {
                     if let Some(src) = tweet.user.clone() {
-                        if !ids.contains(&src.id) {
+                        if ids.contains(&src.id) {
                             let discord_tx_cloned = Arc::clone(&discord_tx);
                             let _ = tokio::spawn(async move {
                                 discord_tx_cloned
@@ -180,7 +176,7 @@ async fn main() -> Result<(), anyhow::Error> {
                                         "url": usr.profile_image_url
                                     },
                                     "title": usr.name,
-                                    "description":"Has tweeted!",
+                                    "description": tweet.text,
                                     "provider": {
                                         "url": tweet_url,
                                         "name": "test"
