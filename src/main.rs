@@ -1,20 +1,19 @@
-use std::env;
+use std::{env, sync::Arc};
 
 use anyhow::Context as AnyhowContext;
 use futures::prelude::*;
-use tokio::sync::mpsc;
-use twitter_stream::{Token, TwitterStream};
-use serenity::{async_trait, framework::standard::Args, model::channel::ReactionType};
-use serenity::client::{Client, Context, EventHandler};
-use serenity::model::channel::Message;
 use serenity::framework::standard::{
-    StandardFramework,
-    CommandResult,
-    macros::{
-        command,
-        group
-    }
+    macros::{command, group},
+    CommandResult, StandardFramework,
 };
+use serenity::model::channel::Message;
+use serenity::{async_trait, framework::standard::Args, model::channel::ReactionType};
+use serenity::{
+    client::{Client, Context, EventHandler},
+    prelude::TypeMapKey,
+};
+use tokio::sync::mpsc::{self, Sender};
+use twitter_stream::{Token, TwitterStream};
 
 #[group]
 #[commands(add_subscription)]
@@ -25,6 +24,10 @@ struct Handler;
 #[async_trait]
 impl EventHandler for Handler {}
 
+struct CommandSender(Sender<Command>);
+impl TypeMapKey for CommandSender {
+    type Value = Arc<CommandSender>;
+}
 enum Command {
     AddTwitterSubscription(String),
 }
@@ -61,7 +64,9 @@ async fn main() {
         .send(Command::AddTwitterSubscription(String::from("Twitter")))
         .await;
 
-    let framework = StandardFramework::new().configure(|c| c.prefix("~")).group(&GENERAL_GROUP);
+    let framework = StandardFramework::new()
+        .configure(|c| c.prefix("~"))
+        .group(&GENERAL_GROUP);
 
     // Login with a bot token from the environment
     let token = env::var("DISCORD_TOKEN").expect("token");
@@ -70,6 +75,11 @@ async fn main() {
         .framework(framework)
         .await
         .expect("Error creating client");
+
+    {
+        let mut data = client.data.write().await;
+        data.insert::<CommandSender>(Arc::new(CommandSender(tx.clone())));
+    }
 
     // start listening for events by starting a single shard
     if let Err(why) = client.start().await {
@@ -91,18 +101,35 @@ async fn spawn_twitter(handle: String, token: Token<&str, &str>) {
 
 // TODO command from discord to add to list of twitter streams
 
-
 #[command]
 #[only_in(guilds)]
 #[allowed_roles("administrator")]
 async fn add_subscription(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     if args.is_empty() {
-        msg.reply(ctx, "You need to provide a twitter handle.").await?;
+        msg.reply(ctx, "You need to provide a twitter handle.")
+            .await?;
     } else {
-        msg.react(ctx, ReactionType::Unicode(String::from("✅"))).await?;
+        msg.react(ctx, ReactionType::Unicode(String::from("✅")))
+            .await?;
     };
 
-    let twitter_handle = args.single::<String>().context("No twitter handle provided")?;
+    let twitter_handle = args
+        .single::<String>()
+        .context("No twitter handle provided")?;
+    msg.react(ctx, ReactionType::Unicode(String::from("👅")))
+        .await?;
+
+    let data = ctx.data.read().await;
+    let tx = data
+        .get::<CommandSender>()
+        .expect("Expected CommandSender in TypeMap.");
+        
+    if let Err(e) =
+        tx.0.send(Command::AddTwitterSubscription(twitter_handle))
+            .await
+    {
+        log::error!("Failed to send add twitter sub {}", e)
+    }
 
     // TODO write confirmation
     // let channel = ctx.cache
