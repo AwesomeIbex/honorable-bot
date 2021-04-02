@@ -133,5 +133,5 @@ pub async fn start_manager(
                 }
             }
         }
-    });
+    }).await;
 }
