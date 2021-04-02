@@ -41,6 +41,7 @@ impl Config {
 
 /// I wonder if having twitter, discord have recievers but they only have one tx which is main command.
 /// Then the main rx here can just delegate to each rx
+/// Then they can just implement a manager interface which has an rx of T and then a tx of command and an arc of config
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     pretty_env_logger::init();
