@@ -39,11 +39,14 @@ impl Config {
     }
 }
 
+/// I wonder if having twitter, discord have recievers but they only have one tx which is main command.
+/// Then the main rx here can just delegate to each rx
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     pretty_env_logger::init();
     let config = Config::read()?;
 
+    // Atm this is taking the twitter and not really the generic command system
     let (cmd_tx, cmd_rx) = mpsc::channel(64);
     let (discord_tx, discord_rx) = mpsc::channel(64);
 
