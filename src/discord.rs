@@ -67,7 +67,7 @@ async fn add_subscription(ctx: &Context, msg: &Message, mut args: Args) -> Comma
     Ok(())
 }
 
-pub fn start_manager(
+pub async fn start_manager(
     config_cloned: Arc<Config>,
     mut rx: Receiver<DiscordCommand>,
     cmd_tx: Sender<TwitterCommand>,

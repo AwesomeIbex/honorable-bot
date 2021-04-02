@@ -62,8 +62,7 @@ async fn main() -> Result<(), anyhow::Error> {
         )))
         .await;
 
-    discord::start_manager(Arc::clone(&config), discord_rx, cmd_tx);
+    discord::start_manager(Arc::clone(&config), discord_rx, cmd_tx).await; //TODO remove this await when we have main command loop
 
-    loop {}
     Ok(())
 }
