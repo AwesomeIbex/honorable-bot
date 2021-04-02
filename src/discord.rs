@@ -113,6 +113,8 @@ pub fn start_manager(
                                 "embed": {
                                     "url": tweet_url,
                                     "image": {
+                                        "height": 300,
+                                        "width": 300,
                                         "url": usr.profile_image_url
                                     },
                                     "title": usr.name,
