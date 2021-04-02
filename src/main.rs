@@ -1,8 +1,9 @@
-use std::{env, sync::Arc};
+use std::{env, fs::File, io::BufReader, sync::Arc};
 
 use anyhow::Context as AnyhowContext;
 use egg_mode::{stream::StreamMessage, tweet::Tweet, KeyPair};
 use futures::prelude::*;
+use serde::{Deserialize, Serialize};
 use serenity::model::channel::Message;
 use serenity::{async_trait, framework::standard::Args, model::channel::ReactionType};
 use serenity::{
@@ -17,13 +18,12 @@ use serenity::{
     http::Http,
 };
 use tokio::sync::mpsc::{self, Sender};
-use twitter_stream::{Token, TwitterStream};
 
 #[group]
 #[commands(add_subscription)]
 struct General;
 
-struct Handler;
+struct Handler; //TODO can store shit in here apparently
 
 #[async_trait]
 impl EventHandler for Handler {}
@@ -38,43 +38,65 @@ enum TwitterCommand {
 enum DiscordCommand {
     SendTweet(Tweet),
 }
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+struct Config {
+    twitter: Twitter,
+}
+#[derive(Deserialize, Serialize, Debug, Clone)]
+struct Twitter {
+    consumer_key: String,
+    consummer_secret: String,
+    user_access_key: String,
+    user_access_secret: String,
+    subscriptions: Vec<String>,
+}
+
+fn update_config(config: Config) {
+
+}
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     pretty_env_logger::init();
     dotenv::dotenv().ok();
+    let config = File::open("config.json")?;
+    let reader = BufReader::new(config);
+    let config: Arc<Config> = Arc::new(serde_json::from_reader(reader)?);
+
     let (cmd_tx, mut cmd_rx) = mpsc::channel(64);
     let (discord_tx, mut discord_rx) = mpsc::channel(64);
 
-    // discord, twitter, coingecko threads all sending to big command rx with tx's back to dtc
+    // discord, twitter, coingecko threads all sending to big command rx select with tx's back to dtc
     // TODO coingecko checks
     // TODO file persistence
 
+    let config_cloned = Arc::clone(&config);
     let _twitter_manager = tokio::spawn(async move {
-        println!("Starting connection to twitter..");
-        let c_key = env::var("TWITTER_CONSUMER_KEY").expect("TWITTER_CONSUMER_KEY");
-        let c_secret = env::var("TWITTER_CONSUMER_SECRET").expect("TWITTER_CONSUMER_SECRET");
-        let access_key = env::var("TWITTER_ACCESS_KEY").expect("TWITTER_ACCESS_KEY");
-        let access_secret = env::var("TWITTER_ACCESS_SECRET").expect("TWITTER_ACCESS_SECRET");
-
-        let consumer = KeyPair::new(c_key, c_secret);
-        let access = KeyPair::new(access_key, access_secret);
+        let consumer = KeyPair::new(
+            config_cloned.twitter.consumer_key.clone(),
+            config_cloned.twitter.consummer_secret.clone(),
+        );
+        let access = KeyPair::new(
+            config_cloned.twitter.user_access_key.clone(),
+            config_cloned.twitter.user_access_secret.clone(),
+        );
         let token = egg_mode::Token::Access { consumer, access };
-        let subscriptions = vec![
-            String::from("Polkadot"),
-            String::from("Cardano"),
-            String::from("Filecoin"),
-        ];
 
         // Spawn a new task to handle the operations on the subscription list
-        let mut subscriptions_cloned = subscriptions.clone();
+        let c = config_cloned.clone();
         tokio::spawn(async move {
             while let Some(cmd) = cmd_rx.recv().await {
                 match cmd {
                     TwitterCommand::AddTwitterSubscription(handle) => {
-                        if !subscriptions_cloned.contains(&handle) {
-                            subscriptions_cloned.push(handle);
-                            // Maybe could short circuit app and then reload from config???
-                            // panic!("Reboot!");                        }
+                        if !c.twitter.subscriptions.contains(&handle) {
+                            let mut subscriptions = c.twitter.subscriptions.clone();
+                            subscriptions.push(handle);
+                            update_config(Config {
+                                twitter: Twitter {
+                                    subscriptions,
+                                    ..c.twitter.clone()
+                                }
+                            })
                         }
                     }
                 }
@@ -83,13 +105,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
         // curl 'https://tweeterid.com/ajax.php' -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0' -H 'Accept: */*' -H 'Accept-Language: en-US,en;q=0.5' --compressed -H 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8' -H 'X-Requested-With: XMLHttpRequest' -H 'Origin: https://tweeterid.com' -H 'Connection: keep-alive' -H 'Referer: https://tweeterid.com/' -H 'Sec-Fetch-Dest: empty' -H 'Sec-Fetch-Mode: cors' -H 'Sec-Fetch-Site: same-origin' -H 'Pragma: no-cache' -H 'Cache-Control: no-cache' --data-raw 'input=%40polkadot'
         let mut ids = vec![];
-        for handle in subscriptions {
+        for handle in config_cloned.twitter.subscriptions.clone() {
             let mut search = egg_mode::user::search(handle, &token);
             match search.try_next().await {
-                Ok(Some(u)) => {
-                    println!("Found twitter user {:?}", u.id);
-                    ids.push(u.id)
-                }
+                Ok(Some(u)) => ids.push(u.id),
                 Err(e) => log::error!("Failed to search {}", e),
                 _ => {}
             }
@@ -105,14 +124,12 @@ async fn main() -> Result<(), anyhow::Error> {
                         if ids.contains(&src.id) {
                             let discord_tx_cloned = Arc::clone(&discord_tx);
                             let _ = tokio::spawn(async move {
-                                discord_tx_cloned
+                                if let Err(e) = discord_tx_cloned
                                     .send(DiscordCommand::SendTweet(tweet.clone()))
-                                    .await;
-                                println!(
-                                    "Received tweet from {}:\n{}\n",
-                                    tweet.user.unwrap().name,
-                                    tweet.text
-                                );
+                                    .await
+                                {
+                                    log::error!("Failed to send command {}", e);
+                                }
                             });
                         }
                     }
@@ -123,7 +140,6 @@ async fn main() -> Result<(), anyhow::Error> {
             .expect("Stream error");
     });
 
-    println!("Sending random example..");
     let _ = cmd_tx
         .send(TwitterCommand::AddTwitterSubscription(String::from(
             "Polkadot",
@@ -131,12 +147,12 @@ async fn main() -> Result<(), anyhow::Error> {
         .await;
 
     let _discord_manager = tokio::spawn(async move {
-        println!("Starting connection to discord..");
+        let channel_id = 826371481499860993; //TODO setup with channel id
         let framework = StandardFramework::new()
             .configure(|c| c.prefix("~"))
             .group(&GENERAL_GROUP);
 
-        let token = env::var("DISCORD_TOKEN").expect("discord bot token");
+        let token = env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN");
 
         let mut client = Client::builder(token.clone())
             .event_handler(Handler)
@@ -150,9 +166,7 @@ async fn main() -> Result<(), anyhow::Error> {
             data.insert::<CommandSender>(Arc::new(CommandSender(cmd_tx.clone())));
         }
 
-        // spawn this elsewhere
-        let client_manager = tokio::spawn(async move {
-            println!("Creating discord client..");
+        let _client_manager = tokio::spawn(async move {
             if let Err(why) = client.start().await {
                 println!("An error occurred while running the client: {:?}", why);
             }
@@ -162,11 +176,14 @@ async fn main() -> Result<(), anyhow::Error> {
             match cmd {
                 DiscordCommand::SendTweet(tweet) => {
                     let user_screen_name = tweet.user.as_ref().unwrap().screen_name.clone();
-                    let tweet_url = format!("https://twitter.com/{}/status/{}", user_screen_name, tweet.id);
+                    let tweet_url = format!(
+                        "https://twitter.com/{}/status/{}",
+                        user_screen_name, tweet.id
+                    );
                     let usr = tweet.user.unwrap();
                     if let Err(e) = http
                         .send_message(
-                            826371481499860993,
+                            channel_id,
                             &serde_json::json!({
                                 "content": tweet_url,
                                 "type": "article",
@@ -197,24 +214,24 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-async fn spawn_twitter(
-    handle: String,
-    token: Arc<Token<String, String>>,
-    tx: Arc<Sender<DiscordCommand>>,
-) {
-    if let Err(e) = TwitterStream::track(&handle, &token)
-        .try_flatten_stream()
-        .try_for_each(|json| {
-            println!("{}", json);
-            // TODO send message to channel
-            // tx.send(DiscordCommand::Send(json));
-            future::ok(())
-        })
-        .await
-    {
-        log::error!("Failed to handle twitter stream {}", e)
-    }
-}
+// async fn spawn_twitter(
+//     handle: String,
+//     token: Arc<Token<String, String>>,
+//     tx: Arc<Sender<DiscordCommand>>,
+// ) {
+//     if let Err(e) = TwitterStream::track(&handle, &token)
+//         .try_flatten_stream()
+//         .try_for_each(|json| {
+//             println!("{}", json);
+//             // TODO send message to channel
+//             // tx.send(DiscordCommand::Send(json));
+//             future::ok(())
+//         })
+//         .await
+//     {
+//         log::error!("Failed to handle twitter stream {}", e)
+//     }
+// }
 
 #[command]
 #[only_in(guilds)]
