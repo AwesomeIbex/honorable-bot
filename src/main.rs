@@ -52,6 +52,7 @@ struct Config {
 impl Config {
     fn persist(&self) -> Result<(), anyhow::Error> {
         let mut file = OpenOptions::new()
+            .append(false)
             .write(true)
             .create(true)
             .open("config.json")?;
@@ -82,7 +83,6 @@ struct Discord {
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     pretty_env_logger::init();
-    dotenv::dotenv().ok();
     let config = Config::read()?;
 
     let (cmd_tx, mut cmd_rx) = mpsc::channel(64);
@@ -237,25 +237,6 @@ async fn main() -> Result<(), anyhow::Error> {
 
     Ok(())
 }
-
-// async fn spawn_twitter(
-//     handle: String,
-//     token: Arc<Token<String, String>>,
-//     tx: Arc<Sender<DiscordCommand>>,
-// ) {
-//     if let Err(e) = TwitterStream::track(&handle, &token)
-//         .try_flatten_stream()
-//         .try_for_each(|json| {
-//             println!("{}", json);
-//             // TODO send message to channel
-//             // tx.send(DiscordCommand::Send(json));
-//             future::ok(())
-//         })
-//         .await
-//     {
-//         log::error!("Failed to handle twitter stream {}", e)
-//     }
-// }
 
 #[command]
 #[only_in(guilds)]

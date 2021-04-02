@@ -1,0 +1,15 @@
+{
+  "twitter": {
+    "consumer_key": "",
+    "consumer_secret": "",
+    "user_access_key": "",
+    "user_access_secret": "",
+    "subscriptions": [
+      "Polkadot"
+    ]
+  },
+  "discord": {
+    "channel_id": 0,
+    "token": ""
+  }
+}
