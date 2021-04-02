@@ -1,4 +1,9 @@
-use std::{env, fs::File, io::BufReader, sync::Arc};
+use std::{
+    env,
+    fs::{File, OpenOptions},
+    io::{BufReader, Write},
+    sync::Arc,
+};
 
 use anyhow::Context as AnyhowContext;
 use egg_mode::{stream::StreamMessage, tweet::Tweet, KeyPair};
@@ -42,39 +47,55 @@ enum DiscordCommand {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 struct Config {
     twitter: Twitter,
+    discord: Discord,
+}
+impl Config {
+    fn persist(&self) -> Result<(), anyhow::Error> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open("config.json")?;
+        file.write_all(serde_json::to_string_pretty(self)?.as_bytes())?;
+
+        Ok(())
+    }
+    fn read() -> Result<Arc<Config>, anyhow::Error> {
+        let config = File::open("config.json")?;
+        let reader = BufReader::new(config);
+        Ok(Arc::new(serde_json::from_reader(reader)?))
+    }
 }
 #[derive(Deserialize, Serialize, Debug, Clone)]
 struct Twitter {
     consumer_key: String,
-    consummer_secret: String,
+    consumer_secret: String,
     user_access_key: String,
     user_access_secret: String,
     subscriptions: Vec<String>,
 }
-
-fn update_config(config: Config) {
-
+#[derive(Deserialize, Serialize, Debug, Clone)]
+struct Discord {
+    channel_id: u64,
+    token: String,
 }
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     pretty_env_logger::init();
     dotenv::dotenv().ok();
-    let config = File::open("config.json")?;
-    let reader = BufReader::new(config);
-    let config: Arc<Config> = Arc::new(serde_json::from_reader(reader)?);
+    let config = Config::read()?;
 
     let (cmd_tx, mut cmd_rx) = mpsc::channel(64);
     let (discord_tx, mut discord_rx) = mpsc::channel(64);
 
     // discord, twitter, coingecko threads all sending to big command rx select with tx's back to dtc
     // TODO coingecko checks
-    // TODO file persistence
 
     let config_cloned = Arc::clone(&config);
     let _twitter_manager = tokio::spawn(async move {
         let consumer = KeyPair::new(
             config_cloned.twitter.consumer_key.clone(),
-            config_cloned.twitter.consummer_secret.clone(),
+            config_cloned.twitter.consumer_secret.clone(),
         );
         let access = KeyPair::new(
             config_cloned.twitter.user_access_key.clone(),
@@ -91,12 +112,17 @@ async fn main() -> Result<(), anyhow::Error> {
                         if !c.twitter.subscriptions.contains(&handle) {
                             let mut subscriptions = c.twitter.subscriptions.clone();
                             subscriptions.push(handle);
-                            update_config(Config {
+                            Config {
                                 twitter: Twitter {
                                     subscriptions,
                                     ..c.twitter.clone()
-                                }
-                            })
+                                },
+                                discord: Discord {
+                                    ..c.discord.clone()
+                                },
+                            }
+                            .persist()
+                            .unwrap(); //TODO remove
                         }
                     }
                 }
@@ -146,20 +172,18 @@ async fn main() -> Result<(), anyhow::Error> {
         )))
         .await;
 
+    let config_cloned = Arc::clone(&config);
     let _discord_manager = tokio::spawn(async move {
-        let channel_id = 826371481499860993; //TODO setup with channel id
         let framework = StandardFramework::new()
             .configure(|c| c.prefix("~"))
             .group(&GENERAL_GROUP);
 
-        let token = env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN");
-
-        let mut client = Client::builder(token.clone())
+        let mut client = Client::builder(config_cloned.discord.token.clone())
             .event_handler(Handler)
             .framework(framework)
             .await
             .expect("Error creating client");
-        let http = Http::new_with_token(&token);
+        let http = Http::new_with_token(&config_cloned.discord.token);
 
         {
             let mut data = client.data.write().await;
@@ -183,7 +207,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     let usr = tweet.user.unwrap();
                     if let Err(e) = http
                         .send_message(
-                            channel_id,
+                            config_cloned.discord.channel_id,
                             &serde_json::json!({
                                 "content": tweet_url,
                                 "type": "article",
