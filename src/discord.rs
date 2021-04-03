@@ -2,6 +2,10 @@ use std::sync::Arc;
 
 use anyhow::Context as AnyhowContext;
 
+use crate::{
+    command::{Command, CommandSender, DiscordCommand, Manager, TwitterCommand},
+    Config,
+};
 use serde::{Deserialize, Serialize};
 use serenity::client::{Client, Context, EventHandler};
 use serenity::model::channel::Message;
@@ -14,7 +18,6 @@ use serenity::{
     http::Http,
 };
 use tokio::sync::mpsc::{Receiver, Sender};
-use crate::{Config, command::{Command, CommandSender, DiscordCommand, Manager, TwitterCommand}};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct DiscordConfig {
@@ -77,25 +80,25 @@ impl Manager<DiscordCommand> for DiscordConfig {
             let framework = StandardFramework::new()
                 .configure(|c| c.prefix("~"))
                 .group(&GENERAL_GROUP);
-    
+
             let mut client = Client::builder(config_cloned.discord.token.clone())
                 .event_handler(Handler)
                 .framework(framework)
                 .await
                 .expect("Error creating client");
             let http = Http::new_with_token(&config_cloned.discord.token);
-    
+
             {
                 let mut data = client.data.write().await;
                 data.insert::<CommandSender>(Arc::new(CommandSender(tx.clone())));
             }
-    
+
             let _client_manager = tokio::spawn(async move {
                 if let Err(why) = client.start().await {
                     println!("An error occurred while running the client: {:?}", why);
                 }
             });
-    
+
             while let Some(cmd) = rx.recv().await {
                 match cmd {
                     DiscordCommand::SendTweet(tweet) => {
@@ -130,6 +133,27 @@ impl Manager<DiscordCommand> for DiscordConfig {
                             .await
                         {
                             log::error!("Error sending message {}", e)
+                        }
+                    }
+                    DiscordCommand::SendCoingeckoBase(coins) => {
+                        let body = &serde_json::json!({
+                            "content": format!("{:?}", coins),
+                            "type": "article",
+                            "embed": {
+                                "url": "https://coingecko.com",
+                                "title": "Coingecko base right now",
+                                "description": "This is the base for the current coingecko state",
+                                "provider": {
+                                    "url": "https://coingecko.com",
+                                    "name": "test"
+                                }
+                            }
+                        });
+                        let message = http
+                            .send_message(config_cloned.discord.channel_id, body)
+                            .await;
+                        if let Err(e) = message {
+                            log::error!("Error sending coin state {}", e)
                         }
                     }
                 }

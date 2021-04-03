@@ -52,7 +52,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let (tx, mut rx): (Sender<Command>, Receiver<Command>) = mpsc::channel(64);
     let (twitter_tx, twitter_rx) = mpsc::channel(64);
     let (discord_tx, discord_rx) = mpsc::channel(64);
-    let (coingecko_tx, coingecko_rx) = mpsc::channel(64);
+    let (_coingecko_tx, coingecko_rx) = mpsc::channel(64);
     // TODO coingecko manager
 
 

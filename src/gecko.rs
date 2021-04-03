@@ -2,9 +2,8 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{Receiver, Sender};
-
 use crate::{
-    command::{CoingeckoCommand, Command, Manager},
+    command::{CoingeckoCommand, Command, Manager, DiscordCommand},
     Config,
 };
 
@@ -17,7 +16,7 @@ impl Manager<CoingeckoCommand> for CoingeckoConfig {
     fn start_manager(
         &self,
         config_cloned: Arc<Config>,
-        mut rx: Receiver<CoingeckoCommand>,
+        _rx: Receiver<CoingeckoCommand>,
         tx: Sender<Command>,
     ) {
         log::info!("Starting coingecko manager");
@@ -28,6 +27,7 @@ impl Manager<CoingeckoCommand> for CoingeckoConfig {
             // delay for config length
 
             if let Ok(state) = client.coins_list().await {
+                let _ = tx.send(Command::Discord(DiscordCommand::SendCoingeckoBase(state))).await;
                 loop {
                     if let Ok(new_state) = client.coins_list().await {
                         // Compare the states, if any condition to jump is met, send a message to discord
