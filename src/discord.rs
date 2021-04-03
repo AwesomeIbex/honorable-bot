@@ -14,11 +14,7 @@ use serenity::{
     http::Http,
 };
 use tokio::sync::mpsc::{Receiver, Sender};
-
-use crate::{
-    command::{CommandSender, DiscordCommand, TwitterCommand},
-    Config,
-};
+use crate::{Config, command::{Command, CommandSender, DiscordCommand, Manager, TwitterCommand}};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct DiscordConfig {
@@ -59,79 +55,84 @@ async fn add_subscription(ctx: &Context, msg: &Message, mut args: Args) -> Comma
         .expect("Expected CommandSender in TypeMap.");
 
     if let Err(e) =
-        tx.0.send(TwitterCommand::AddTwitterSubscription(twitter_handle))
-            .await
+        tx.0.send(Command::Twitter(TwitterCommand::AddTwitterSubscription(
+            twitter_handle,
+        )))
+        .await
     {
         log::error!("Failed to send add twitter sub {}", e)
     }
     Ok(())
 }
 
-pub async fn start_manager(
-    config_cloned: Arc<Config>,
-    mut rx: Receiver<DiscordCommand>,
-    cmd_tx: Sender<TwitterCommand>,
-) {
-    let _discord_manager = tokio::spawn(async move {
-        let framework = StandardFramework::new()
-            .configure(|c| c.prefix("~"))
-            .group(&GENERAL_GROUP);
-
-        let mut client = Client::builder(config_cloned.discord.token.clone())
-            .event_handler(Handler)
-            .framework(framework)
-            .await
-            .expect("Error creating client");
-        let http = Http::new_with_token(&config_cloned.discord.token);
-
-        {
-            let mut data = client.data.write().await;
-            data.insert::<CommandSender>(Arc::new(CommandSender(cmd_tx.clone())));
-        }
-
-        let _client_manager = tokio::spawn(async move {
-            if let Err(why) = client.start().await {
-                println!("An error occurred while running the client: {:?}", why);
+impl Manager<DiscordCommand> for DiscordConfig {
+    fn start_manager(
+        &self,
+        config_cloned: Arc<Config>,
+        mut rx: Receiver<DiscordCommand>,
+        tx: Sender<Command>,
+    ) {
+        let _discord_manager = tokio::spawn(async move {
+            let framework = StandardFramework::new()
+                .configure(|c| c.prefix("~"))
+                .group(&GENERAL_GROUP);
+    
+            let mut client = Client::builder(config_cloned.discord.token.clone())
+                .event_handler(Handler)
+                .framework(framework)
+                .await
+                .expect("Error creating client");
+            let http = Http::new_with_token(&config_cloned.discord.token);
+    
+            {
+                let mut data = client.data.write().await;
+                data.insert::<CommandSender>(Arc::new(CommandSender(tx.clone())));
             }
-        });
-
-        while let Some(cmd) = rx.recv().await {
-            match cmd {
-                DiscordCommand::SendTweet(tweet) => {
-                    let user_screen_name = tweet.user.as_ref().unwrap().screen_name.clone();
-                    let tweet_url = format!(
-                        "https://twitter.com/{}/status/{}",
-                        user_screen_name, tweet.id
-                    );
-                    let usr = tweet.user.unwrap();
-                    if let Err(e) = http
-                        .send_message(
-                            config_cloned.discord.channel_id,
-                            &serde_json::json!({
-                                "content": tweet_url,
-                                "type": "article",
-                                "embed": {
-                                    "url": tweet_url,
-                                    "image": {
-                                        "height": 300,
-                                        "width": 300,
-                                        "url": usr.profile_image_url
-                                    },
-                                    "title": usr.name,
-                                    "description": tweet.text,
-                                    "provider": {
+    
+            let _client_manager = tokio::spawn(async move {
+                if let Err(why) = client.start().await {
+                    println!("An error occurred while running the client: {:?}", why);
+                }
+            });
+    
+            while let Some(cmd) = rx.recv().await {
+                match cmd {
+                    DiscordCommand::SendTweet(tweet) => {
+                        let user_screen_name = tweet.user.as_ref().unwrap().screen_name.clone();
+                        let tweet_url = format!(
+                            "https://twitter.com/{}/status/{}",
+                            user_screen_name, tweet.id
+                        );
+                        let usr = tweet.user.unwrap();
+                        if let Err(e) = http
+                            .send_message(
+                                config_cloned.discord.channel_id,
+                                &serde_json::json!({
+                                    "content": tweet_url,
+                                    "type": "article",
+                                    "embed": {
                                         "url": tweet_url,
-                                        "name": "test"
+                                        "image": {
+                                            "height": 300,
+                                            "width": 300,
+                                            "url": usr.profile_image_url
+                                        },
+                                        "title": usr.name,
+                                        "description": tweet.text,
+                                        "provider": {
+                                            "url": tweet_url,
+                                            "name": "test"
+                                        }
                                     }
-                                }
-                            }),
-                        )
-                        .await
-                    {
-                        log::error!("Error sending message {}", e)
+                                }),
+                            )
+                            .await
+                        {
+                            log::error!("Error sending message {}", e)
+                        }
                     }
                 }
             }
-        }
-    }).await;
+        });
+    }
 }

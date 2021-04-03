@@ -4,12 +4,12 @@ use std::{
     sync::Arc,
 };
 
-use command::TwitterCommand;
+use command::{Command, TwitterCommand, Manager};
 use discord::DiscordConfig;
 
 use serde::{Deserialize, Serialize};
 
-use tokio::sync::mpsc::{self};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 use twitter::TwitterConfig;
 
 pub mod command;
@@ -39,8 +39,6 @@ impl Config {
     }
 }
 
-/// I wonder if having twitter, discord have recievers but they only have one tx which is main command.
-/// Then the main rx here can just delegate to each rx
 /// Then they can just implement a manager interface which has an rx of T and then a tx of command and an arc of config
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -48,21 +46,44 @@ async fn main() -> Result<(), anyhow::Error> {
     let config = Config::read()?;
 
     // Atm this is taking the twitter and not really the generic command system
-    let (cmd_tx, cmd_rx) = mpsc::channel(64);
+    let (tx, mut rx): (Sender<Command>, Receiver<Command>) = mpsc::channel(64);
+    let (twitter_tx, twitter_rx) = mpsc::channel(64);
     let (discord_tx, discord_rx) = mpsc::channel(64);
 
     // discord, twitter, coingecko threads all sending to big command rx select with tx's back to dtc
     // TODO coingecko checks
 
-    twitter::start_manager(Arc::clone(&config), cmd_rx, discord_tx);
+    config.twitter.start_manager(Arc::clone(&config), twitter_rx, tx.clone());
+    config.discord.start_manager(Arc::clone(&config), discord_rx, tx.clone());
 
-    let _ = cmd_tx
+    let _ = twitter_tx
         .send(TwitterCommand::AddTwitterSubscription(String::from(
             "Polkadot",
         )))
         .await;
 
-    discord::start_manager(Arc::clone(&config), discord_rx, cmd_tx).await; //TODO remove this await when we have main command loop
+
+    let _main: Result<(), anyhow::Error> = tokio::spawn(async move {
+        while let Some(cmd) = rx.recv().await {
+            match cmd {
+                Command::Twitter(c) => {
+                    let _ = twitter_tx
+                        .send(c)
+                        .await
+                        .map_err(|e| log::error!("Failed to send command {}", e));
+                }
+                Command::Discord(c) => {
+                    let _ = discord_tx
+                        .send(c)
+                        .await
+                        .map_err(|e| log::error!("Failed to send command {}", e));
+                }
+            }
+        }
+        Ok(())
+    })
+    .await
+    .expect("Main command loop died");
 
     Ok(())
 }
