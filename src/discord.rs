@@ -136,13 +136,9 @@ impl Manager<DiscordCommand> for DiscordConfig {
                         }
                     }
                     DiscordCommand::SendCoingeckoBase(coins) => {
-                        let coins_str = coins
-                        .iter()
-                        .map(|coin| coin.name.to_string())
-                        .collect::<Vec<String>>()
-                        .join(";");
+                        println!("coins: {:#?}", coins);
                         let body = &serde_json::json!({
-                            "content": coins[5].symbol,
+                            "content": "asdasdasdsa",
                             "type": "article",
                             "embed": {
                                 "url": "https://coingecko.com",

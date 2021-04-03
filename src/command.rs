@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use coingecko::Coin;
+use coingecko::{SimplePrices};
 use egg_mode::tweet::Tweet;
 
 use serenity::prelude::TypeMapKey;
@@ -19,7 +19,7 @@ pub enum TwitterCommand {
 }
 pub enum DiscordCommand {
     SendTweet(Tweet),
-    SendCoingeckoBase(Vec<Coin>),
+    SendCoingeckoBase(SimplePrices),
 }
 pub enum CoingeckoCommand {
 
