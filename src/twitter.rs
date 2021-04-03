@@ -21,7 +21,7 @@ impl Manager<TwitterCommand> for TwitterConfig {
     fn start_manager(
         &self,
         config_cloned: Arc<Config>,
-        rx: Receiver<TwitterCommand>,
+        mut rx: Receiver<TwitterCommand>,
         tx: Sender<Command>,
     ) {
         let _twitter_manager = tokio::spawn(async move {
