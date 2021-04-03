@@ -6,7 +6,10 @@ use serde::{Deserialize, Serialize};
 
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::{Config, command::{Command, DiscordCommand, Manager, TwitterCommand}, discord};
+use crate::{
+    command::{Command, DiscordCommand, Manager, TwitterCommand},
+    discord, gecko, Config,
+};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct TwitterConfig {
@@ -34,7 +37,7 @@ impl Manager<TwitterCommand> for TwitterConfig {
                 config_cloned.twitter.user_access_secret.clone(),
             );
             let token = egg_mode::Token::Access { consumer, access };
-    
+
             // Spawn a new task to handle the operations on the subscription list
             let c = config_cloned.clone();
             tokio::spawn(async move {
@@ -52,6 +55,9 @@ impl Manager<TwitterCommand> for TwitterConfig {
                                     discord: discord::DiscordConfig {
                                         ..c.discord.clone()
                                     },
+                                    coingecko: gecko::CoingeckoConfig {
+                                        ..c.coingecko.clone()
+                                    },
                                 }
                                 .persist()
                                 .unwrap(); //TODO remove
@@ -60,7 +66,7 @@ impl Manager<TwitterCommand> for TwitterConfig {
                     }
                 }
             });
-    
+
             // curl 'https://tweeterid.com/ajax.php' -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0' -H 'Accept: */*' -H 'Accept-Language: en-US,en;q=0.5' --compressed -H 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8' -H 'X-Requested-With: XMLHttpRequest' -H 'Origin: https://tweeterid.com' -H 'Connection: keep-alive' -H 'Referer: https://tweeterid.com/' -H 'Sec-Fetch-Dest: empty' -H 'Sec-Fetch-Mode: cors' -H 'Sec-Fetch-Site: same-origin' -H 'Pragma: no-cache' -H 'Cache-Control: no-cache' --data-raw 'input=%40polkadot'
             let mut ids = vec![];
             for handle in config_cloned.twitter.subscriptions.clone() {
@@ -71,7 +77,7 @@ impl Manager<TwitterCommand> for TwitterConfig {
                     _ => {}
                 }
             }
-    
+
             let discord_tx = Arc::new(tx);
             egg_mode::stream::filter()
                 .follow(&ids)

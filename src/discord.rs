@@ -72,6 +72,7 @@ impl Manager<DiscordCommand> for DiscordConfig {
         mut rx: Receiver<DiscordCommand>,
         tx: Sender<Command>,
     ) {
+        log::info!("Starting discord manager");
         let _ = tokio::spawn(async move {
             let framework = StandardFramework::new()
                 .configure(|c| c.prefix("~"))

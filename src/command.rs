@@ -11,12 +11,16 @@ use crate::Config;
 pub enum Command {
     Twitter(TwitterCommand),
     Discord(DiscordCommand),
+    Coingecko(CoingeckoCommand),
 }
 pub enum TwitterCommand {
     AddTwitterSubscription(String),
 }
 pub enum DiscordCommand {
     SendTweet(Tweet),
+}
+pub enum CoingeckoCommand {
+
 }
 pub struct CommandSender(pub Sender<Command>);
 impl TypeMapKey for CommandSender {

@@ -4,6 +4,7 @@ use std::{
     sync::Arc,
 };
 
+use gecko::CoingeckoConfig;
 use command::{Command, TwitterCommand, Manager};
 use discord::DiscordConfig;
 
@@ -15,11 +16,13 @@ use twitter::TwitterConfig;
 pub mod command;
 pub mod discord;
 pub mod twitter;
+pub mod gecko;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Config {
     pub twitter: TwitterConfig,
     pub discord: DiscordConfig,
+    pub coingecko: CoingeckoConfig,
 }
 impl Config {
     fn persist(&self) -> Result<(), anyhow::Error> {
@@ -49,11 +52,13 @@ async fn main() -> Result<(), anyhow::Error> {
     let (tx, mut rx): (Sender<Command>, Receiver<Command>) = mpsc::channel(64);
     let (twitter_tx, twitter_rx) = mpsc::channel(64);
     let (discord_tx, discord_rx) = mpsc::channel(64);
+    let (coingecko_tx, coingecko_rx) = mpsc::channel(64);
     // TODO coingecko manager
 
 
     config.twitter.start_manager(Arc::clone(&config), twitter_rx, tx.clone());
     config.discord.start_manager(Arc::clone(&config), discord_rx, tx.clone());
+    config.coingecko.start_manager(Arc::clone(&config), coingecko_rx, tx.clone());
 
     let _ = twitter_tx
         .send(TwitterCommand::AddTwitterSubscription(String::from(
@@ -77,6 +82,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         .await
                         .map_err(|e| log::error!("Failed to send command {}", e));
                 }
+                Command::Coingecko(_) => {}
             }
         }
         Ok(())
