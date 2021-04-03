@@ -30,10 +30,11 @@ impl Manager<CoingeckoCommand> for CoingeckoConfig {
             if let Ok(state) = client.coins_list().await {
                 let coin_ids = state
                     .iter()
+                    .take(10)
                     .map(|coin| coin.id.to_string())
                     .collect::<Vec<String>>()
                     .join(",");
-                let req = SimplePriceReq::new(coin_ids, "usd".into())
+                let req = SimplePriceReq::new(coin_ids.clone(), "usd".into())
                     .include_market_cap()
                     .include_24hr_vol()
                     .include_24hr_change()
@@ -45,7 +46,13 @@ impl Manager<CoingeckoCommand> for CoingeckoConfig {
                     .await;
 
                 loop {
-                    if let Ok(new_state) = client.simple_price(req.clone()).await {
+                    //TODO clone is implemented here but weird caching issue
+                    let req = SimplePriceReq::new(coin_ids.clone(), "usd".into())
+                    .include_market_cap()
+                    .include_24hr_vol()
+                    .include_24hr_change()
+                    .include_last_updated_at();
+                    if let Ok(new_state) = client.simple_price(req).await {
                         // Compare the states, if any condition to jump is met, send a message to discord
                     }
                     tokio::time::sleep(tokio::time::Duration::from_secs(
