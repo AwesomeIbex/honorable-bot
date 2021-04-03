@@ -24,7 +24,7 @@ impl Manager<TwitterCommand> for TwitterConfig {
         mut rx: Receiver<TwitterCommand>,
         tx: Sender<Command>,
     ) {
-        let _twitter_manager = tokio::spawn(async move {
+        let _ = tokio::spawn(async move {
             let consumer = KeyPair::new(
                 config_cloned.twitter.consumer_key.clone(),
                 config_cloned.twitter.consumer_secret.clone(),

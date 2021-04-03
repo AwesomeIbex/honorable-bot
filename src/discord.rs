@@ -72,7 +72,7 @@ impl Manager<DiscordCommand> for DiscordConfig {
         mut rx: Receiver<DiscordCommand>,
         tx: Sender<Command>,
     ) {
-        let _discord_manager = tokio::spawn(async move {
+        let _ = tokio::spawn(async move {
             let framework = StandardFramework::new()
                 .configure(|c| c.prefix("~"))
                 .group(&GENERAL_GROUP);
