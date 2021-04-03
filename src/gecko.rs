@@ -28,17 +28,19 @@ impl Manager<CoingeckoCommand> for CoingeckoConfig {
             // delay for config length
 
             if let Ok(state) = client.coins_list().await {
+                println!("Found {} coins in list", state.len());
                 let coin_ids = state
                     .iter()
-                    .take(10)
+                    .skip(6595) // There is 6607, really me might wanna take the top 500 and then do a chunked iterator and flatten them for our state
                     .map(|coin| coin.id.to_string())
                     .collect::<Vec<String>>()
                     .join(",");
-                let req = SimplePriceReq::new(coin_ids.clone(), "usd".into())
+                let req = SimplePriceReq::new(coin_ids.clone(), "usd".into()) //TODO problem with req not being cloned
                     .include_market_cap()
                     .include_24hr_vol()
                     .include_24hr_change()
                     .include_last_updated_at();
+                // TODO the response type of this is shit, it should be something better than this.
                 let state = client.simple_price(req).await.unwrap(); //TODO remove me
 
                 let _ = tx
@@ -48,10 +50,10 @@ impl Manager<CoingeckoCommand> for CoingeckoConfig {
                 loop {
                     //TODO clone is implemented here but weird caching issue
                     let req = SimplePriceReq::new(coin_ids.clone(), "usd".into())
-                    .include_market_cap()
-                    .include_24hr_vol()
-                    .include_24hr_change()
-                    .include_last_updated_at();
+                        .include_market_cap()
+                        .include_24hr_vol()
+                        .include_24hr_change()
+                        .include_last_updated_at();
                     if let Ok(new_state) = client.simple_price(req).await {
                         // Compare the states, if any condition to jump is met, send a message to discord
                     }
