@@ -49,9 +49,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let (tx, mut rx): (Sender<Command>, Receiver<Command>) = mpsc::channel(64);
     let (twitter_tx, twitter_rx) = mpsc::channel(64);
     let (discord_tx, discord_rx) = mpsc::channel(64);
+    // TODO coingecko manager
 
-    // discord, twitter, coingecko threads all sending to big command rx select with tx's back to dtc
-    // TODO coingecko checks
 
     config.twitter.start_manager(Arc::clone(&config), twitter_rx, tx.clone());
     config.discord.start_manager(Arc::clone(&config), discord_rx, tx.clone());
