@@ -145,19 +145,27 @@ impl Manager<DiscordCommand> for DiscordConfig {
                         }
                     }
                     DiscordCommand::SendCoingeckoBase(coins) => {
-                        println!("coins: {:#?}", coins);
                         let body = &serde_json::json!({
-                            "content": "asdasdasdsa",
+                            "content": "",
                             "type": "article",
                             "embed": {
                                 "url": "https://coingecko.com",
-                                "title": "Coingecko base right now",
-                                "description": "This is the base for the current coingecko state"
+                                "title": "Coingecko bot started",
+                                "description": ""
                             }
                         });
                         let message = http
                             .send_message(config_cloned.discord.channel_id, body)
                             .await;
+
+                        for market in coins {
+                            let body = &serde_json::json!({
+                                "content": format!("```css\n - [{}] {}; [CURRENT_PRICE] £{} [MARKET_CAP] {}```", market.market_cap_rank, market.id, market.current_price, market.market_cap),
+                                "type": "article"
+                            });
+                            http.send_message(config_cloned.discord.channel_id, body)
+                                .await;
+                        }
                         if let Err(e) = message {
                             log::error!("Error sending coin state {}", e)
                         }
@@ -203,7 +211,7 @@ impl Manager<DiscordCommand> for DiscordConfig {
                             .send_message(config_cloned.discord.channel_id, body)
                             .await;
                         if let Err(e) = message {
-                            log::error!("Error sending market increase {}", e)
+                            log::error!("Error sending market rank increase {}", e)
                         }
                     }
                 }
