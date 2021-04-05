@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use coingecko::{SimplePrices};
 use egg_mode::tweet::Tweet;
-
+use coingecko_tokio::SimplePrices;
 use serenity::prelude::TypeMapKey;
 
 use tokio::sync::mpsc::{Receiver, Sender};

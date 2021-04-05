@@ -151,9 +151,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "coingecko"
+name = "coingecko-tokio"
 version = "0.1.0"
-source = "git+https://github.com/AwesomeIbex/coingecko-rs?branch=feature/tokio#c00d4307a62ddecf689a5fc73b2a246db3ae1545"
+source = "git+https://github.com/AwesomeIbex/coingecko-tokio-rs?tag=0.0.1#696e8dd9db4f1804c533994b2f61f0a44ec3775b"
 dependencies = [
  "const_format",
  "derive_setters",
@@ -607,7 +607,7 @@ name = "honorable-bot"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "coingecko",
+ "coingecko-tokio",
  "egg-mode",
  "futures",
  "log",

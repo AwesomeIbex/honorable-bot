@@ -1,7 +1,7 @@
 [package]
 name = "honorable-bot"
 version = "0.1.0"
-authors = ["Donovan Dall <donovan_dall@sercomm.com>"]
+authors = ["Donovan Dall <awesomealpineibex@gmail.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,7 +11,7 @@ log = "0.4.14"
 pretty_env_logger = "0.4.0"
 anyhow = "1.0.40"
 egg-mode = { git = "https://github.com/egg-mode-rs/egg-mode", branch = "master" }
-coingecko = { git = "https://github.com/AwesomeIbex/coingecko-rs", branch = "feature/tokio" }
+coingecko-tokio = { git = "https://github.com/AwesomeIbex/coingecko-tokio-rs", tag = "0.0.1" }
 futures = "0.3.13"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 serenity = "0.10"
