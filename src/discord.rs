@@ -119,8 +119,8 @@ impl Manager<DiscordCommand> for DiscordConfig {
                                         "embed": {
                                             "url": tweet_url,
                                             "image": {
-                                                "height": 300,
-                                                "width": 300,
+                                                "height": 200,
+                                                "width": 200,
                                                 "url": usr.profile_image_url
                                             },
                                             "title": usr.name,
@@ -171,8 +171,8 @@ impl Manager<DiscordCommand> for DiscordConfig {
                                 "title": m.id,
                                 "description": format!("{} raises its market price by at least TODO percent!", m.id),
                                 "image": {
-                                    "height": 300,
-                                    "width": 300,
+                                    "height": 200,
+                                    "width": 200,
                                     "url": m.image
                                 }
                             }
@@ -193,8 +193,8 @@ impl Manager<DiscordCommand> for DiscordConfig {
                                 "title": m.id,
                                 "description": format!("{} has risen up to the rank of {}!", m.id, m.market_cap_rank),
                                 "image": {
-                                    "height": 300,
-                                    "width": 300,
+                                    "height": 200,
+                                    "width": 200,
                                     "url": m.image
                                 }
                             }
