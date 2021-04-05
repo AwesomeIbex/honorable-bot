@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
     command::{CoingeckoCommand, Command, DiscordCommand, Manager},
@@ -54,7 +54,7 @@ impl Manager<CoingeckoCommand> for CoingeckoConfig {
                         .include_24hr_vol()
                         .include_24hr_change()
                         .include_last_updated_at();
-                    if let Ok(new_state) = client.simple_price(req).await {
+                    if let Ok(_new_state) = client.simple_price(req).await {
                         // Compare the states, if any condition to jump is met, send a message to discord
                     }
                     tokio::time::sleep(tokio::time::Duration::from_secs(
