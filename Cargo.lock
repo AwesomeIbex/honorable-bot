@@ -153,7 +153,6 @@ dependencies = [
 [[package]]
 name = "coingecko-tokio"
 version = "0.1.0"
-source = "git+https://github.com/AwesomeIbex/coingecko-tokio-rs?tag=0.0.2#4f39f05f86a3a3ce3c33f2b3235d8d19c7a41bbf"
 dependencies = [
  "const_format",
  "derive_setters",

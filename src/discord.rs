@@ -169,7 +169,7 @@ impl Manager<DiscordCommand> for DiscordConfig {
                             "embed": {
                                 "url": "https://coingecko.com",
                                 "title": m.id,
-                                "description": format!("{} raises its market price by X percent!", m.id),
+                                "description": format!("{} raises its market price by at least TODO percent!", m.id),
                                 "image": {
                                     "height": 300,
                                     "width": 300,

@@ -65,8 +65,8 @@ async fn compare_state(tx: Sender<Command>, initial_state: &[Market], new_state:
         let market_initial = initial_state.iter().find(|m| m.id == market.id);
         if let Some(market_initial) = market_initial {
             let has_risen_price =
-                ((market.current_price / market_initial.current_price) * 100_f64) >= 0_f64;
-            let raised_ranking = (market.market_cap_rank - market_initial.market_cap_rank) >= 0;
+                ((market.current_price / market_initial.current_price) * 100_f64) >= 15_f64;
+            let raised_ranking = (market.market_cap_rank - market_initial.market_cap_rank) >= 2;
 
             if has_risen_price {
                 tx.send(Command::Discord(
