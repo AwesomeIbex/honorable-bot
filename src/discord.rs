@@ -116,10 +116,19 @@ impl Manager<DiscordCommand> for DiscordConfig {
                                     "type": "article",
                                     "embed": {
                                         "url": tweet_url,
-                                        "image": {
-                                            "height": 300,
-                                            "width": 300,
-                                            "url": usr.profile_image_url
+                                        "embed": {
+                                            "url": tweet_url,
+                                            "image": {
+                                                "height": 300,
+                                                "width": 300,
+                                                "url": usr.profile_image_url
+                                            },
+                                            "title": usr.name,
+                                            "description": tweet.text,
+                                            "provider": {
+                                                "url": tweet_url,
+                                                "name": "test"
+                                            }
                                         },
                                         "title": usr.name,
                                         "description": tweet.text,
@@ -151,6 +160,50 @@ impl Manager<DiscordCommand> for DiscordConfig {
                             .await;
                         if let Err(e) = message {
                             log::error!("Error sending coin state {}", e)
+                        }
+                    }
+                    DiscordCommand::SendCoingeckoPriceIncrease(m) => {
+                        let body = &serde_json::json!({
+                            "content": "Coin price increase!",
+                            "type": "article",
+                            "embed": {
+                                "url": "https://coingecko.com",
+                                "title": m.id,
+                                "description": format!("{} raises its market price by X percent!", m.id),
+                                "image": {
+                                    "height": 300,
+                                    "width": 300,
+                                    "url": m.image
+                                }
+                            }
+                        });
+                        let message = http
+                            .send_message(config_cloned.discord.channel_id, body)
+                            .await;
+                        if let Err(e) = message {
+                            log::error!("Error sending market increase {}", e)
+                        }
+                    }
+                    DiscordCommand::SendCoingeckoRankIncrease(m) => {
+                        let body = &serde_json::json!({
+                            "content": "Market cap rank increase!",
+                            "type": "article",
+                            "embed": {
+                                "url": "https://coingecko.com",
+                                "title": m.id,
+                                "description": format!("{} has risen up to the rank of {}!", m.id, m.market_cap_rank),
+                                "image": {
+                                    "height": 300,
+                                    "width": 300,
+                                    "url": m.image
+                                }
+                            }
+                        });
+                        let message = http
+                            .send_message(config_cloned.discord.channel_id, body)
+                            .await;
+                        if let Err(e) = message {
+                            log::error!("Error sending market increase {}", e)
                         }
                     }
                 }

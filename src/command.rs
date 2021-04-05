@@ -18,6 +18,8 @@ pub enum TwitterCommand {
 }
 pub enum DiscordCommand {
     SendTweet(Tweet),
+    SendCoingeckoPriceIncrease(Market),
+    SendCoingeckoRankIncrease(Market),
     SendCoingeckoBase(Vec<Market>),
 }
 pub enum CoingeckoCommand {

@@ -4,7 +4,7 @@ use crate::{
     command::{CoingeckoCommand, Command, DiscordCommand, Manager},
     Config,
 };
-use coingecko_tokio::{MarketRequest, Order};
+use coingecko_tokio::{Market, MarketRequest, Order};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -42,12 +42,13 @@ impl Manager<CoingeckoCommand> for CoingeckoConfig {
 
                 if let Ok(mut state) = client.markets(req.clone()).await {
                     let _ = tx
-                        .send(Command::Discord(DiscordCommand::SendCoingeckoBase(state)))
+                        .send(Command::Discord(DiscordCommand::SendCoingeckoBase(state.clone())))
                         .await;
 
                     loop {
-                        if let Ok(_new_state) = client.markets(req.clone()).await {
-                            // Compare the states, if any condition to jump is met, send a message to discord
+                        if let Ok(new_state) = client.markets(req.clone()).await {
+                            compare_state(tx.clone(), &state, new_state.clone()).await;
+                            state = new_state;
                         }
                         tokio::time::sleep(tokio::time::Duration::from_secs(
                             config_cloned.coingecko.sleep_time_secs,
@@ -60,4 +61,23 @@ impl Manager<CoingeckoCommand> for CoingeckoConfig {
             }
         });
     }
+}
+
+async fn compare_state(tx: Sender<Command>, initial_state: &[Market], new_state: Vec<Market>) {
+    for market in new_state {
+        let market_initial = initial_state.iter().find(|m| m.id == market.id);
+        if let Some(market_initial) = market_initial {
+            let has_risen_price = ((market.current_price / market_initial.current_price) * 100_f64) > 20_f64;
+            let raised_ranking = (market.market_cap_rank - market_initial.market_cap_rank) >= 2;
+
+            if has_risen_price {
+                tx.send(Command::Discord(DiscordCommand::SendCoingeckoPriceIncrease(market.clone()))).await;
+            }
+            if raised_ranking {
+                tx.send(Command::Discord(DiscordCommand::SendCoingeckoRankIncrease(market))).await;
+            }
+        }
+    }
+    // If any of the new states coins has risen by X percent
+    // If any of the new states coins has raised rankings by 2, who did it overtake?
 }
