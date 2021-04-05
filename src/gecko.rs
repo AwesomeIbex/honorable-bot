@@ -24,43 +24,37 @@ impl Manager<CoingeckoCommand> for CoingeckoConfig {
         let _ = tokio::spawn(async move {
             let client = coingecko_tokio::Client::new(reqwest::Client::new());
 
-            // loop and call list
-            // delay for config length
+            let req = MarketRequest::new(
+                String::from("gbp"),
+                None,
+                None,
+                Some(Order::MarketCapDesc),
+                Some(250),
+                None,
+                None,
+                None,
+            );
 
-            if let Ok(state) = client.coins_list().await {
-                println!("Found {} coins in list", state.len());
-                let req = MarketRequest::new(
-                    String::from("gbp"),
-                    None,
-                    None,
-                    Some(Order::MarketCapDesc),
-                    Some(250),
-                    None,
-                    None,
-                    None,
-                );
+            match client.markets(req.clone()).await {
+                Ok(mut state) => {
+                    let _ = tx
+                        .send(Command::Discord(DiscordCommand::SendCoingeckoBase(
+                            state.clone(),
+                        )))
+                        .await;
 
-                match client.markets(req.clone()).await {
-                    Ok(mut state) => {
-                        let _ = tx
-                            .send(Command::Discord(DiscordCommand::SendCoingeckoBase(
-                                state.clone(),
-                            )))
-                            .await;
-
-                        loop {
-                            if let Ok(new_state) = client.markets(req.clone()).await {
-                                compare_state(tx.clone(), &state, new_state.clone()).await;
-                                state = new_state;
-                            }
-                            tokio::time::sleep(tokio::time::Duration::from_secs(
-                                config_cloned.coingecko.sleep_time_secs,
-                            ))
-                            .await;
+                    loop {
+                        if let Ok(new_state) = client.markets(req.clone()).await {
+                            compare_state(tx.clone(), &state, new_state.clone()).await;
+                            state = new_state;
                         }
+                        tokio::time::sleep(tokio::time::Duration::from_secs(
+                            config_cloned.coingecko.sleep_time_secs,
+                        ))
+                        .await;
                     }
-                    Err(e) => log::error!("Couldnt get base state for coingecko {}", e)
                 }
+                Err(e) => log::error!("Couldnt get base state for coingecko {}", e),
             }
         });
     }
