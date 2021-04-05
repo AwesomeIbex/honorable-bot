@@ -164,15 +164,15 @@ impl Manager<DiscordCommand> for DiscordConfig {
                     }
                     DiscordCommand::SendCoingeckoPriceIncrease(m) => {
                         let body = &serde_json::json!({
-                            "content": "Coin price increase!",
+                            "content": "",
                             "type": "article",
                             "embed": {
                                 "url": "https://coingecko.com",
                                 "title": m.id,
                                 "description": format!("{} raises its market price by at least TODO percent!", m.id),
                                 "image": {
-                                    "height": 200,
-                                    "width": 200,
+                                    "height": 150,
+                                    "width": 150,
                                     "url": m.image
                                 }
                             }
@@ -184,17 +184,17 @@ impl Manager<DiscordCommand> for DiscordConfig {
                             log::error!("Error sending market increase {}", e)
                         }
                     }
-                    DiscordCommand::SendCoingeckoRankIncrease(m) => {
+                    DiscordCommand::SendCoingeckoRankIncrease(m, previous) => {
                         let body = &serde_json::json!({
-                            "content": "Market cap rank increase!",
+                            "content": "",
                             "type": "article",
                             "embed": {
                                 "url": "https://coingecko.com",
                                 "title": m.id,
-                                "description": format!("{} has risen up to the rank of {}!", m.id, m.market_cap_rank),
+                                "description": format!("{} has risen up to the rank of {}, previous rank {}", m.id, m.market_cap_rank, previous),
                                 "image": {
-                                    "height": 200,
-                                    "width": 200,
+                                    "height": 150,
+                                    "width": 150,
                                     "url": m.image
                                 }
                             }

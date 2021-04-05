@@ -47,7 +47,7 @@ impl Manager<TwitterCommand> for TwitterConfig {
                             if !c.twitter.subscriptions.contains(&handle) {
                                 let mut subscriptions = c.twitter.subscriptions.clone();
                                 subscriptions.push(handle);
-                                Config {
+                                let config = Config {
                                     twitter: TwitterConfig {
                                         subscriptions,
                                         ..c.twitter.clone()
@@ -58,9 +58,11 @@ impl Manager<TwitterCommand> for TwitterConfig {
                                     coingecko: gecko::CoingeckoConfig {
                                         ..c.coingecko.clone()
                                     },
+                                };
+
+                                if let Err(e) = config.persist() {
+                                    log::error!("Failed to persist config {}", e);
                                 }
-                                .persist()
-                                .unwrap(); //TODO remove
                             }
                         }
                     }

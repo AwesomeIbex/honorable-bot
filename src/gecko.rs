@@ -32,7 +32,6 @@ impl Manager<CoingeckoCommand> for CoingeckoConfig {
                 Some(250),
                 None,
                 None,
-                None,
             );
 
             match client.markets(req.clone()).await {
@@ -66,7 +65,7 @@ async fn compare_state(tx: Sender<Command>, initial_state: &[Market], new_state:
         if let Some(market_initial) = market_initial {
             let has_risen_price =
                 ((market.current_price / market_initial.current_price) * 100_f64) >= 120_f64;
-            let raised_ranking = (market.market_cap_rank - market_initial.market_cap_rank) >= 2;
+            let raised_ranking = (market_initial.market_cap_rank - market.market_cap_rank) >= 5;
 
             if has_risen_price {
                 tx.send(Command::Discord(
@@ -77,6 +76,7 @@ async fn compare_state(tx: Sender<Command>, initial_state: &[Market], new_state:
             if raised_ranking {
                 tx.send(Command::Discord(DiscordCommand::SendCoingeckoRankIncrease(
                     market,
+                    market_initial.market_cap_rank
                 )))
                 .await;
             }
