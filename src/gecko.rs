@@ -4,9 +4,9 @@ use crate::{
     command::{CoingeckoCommand, Command, DiscordCommand, Manager},
     Config,
 };
+use coingecko_tokio::{MarketRequest, Order};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{Receiver, Sender};
-use coingecko_tokio::MarketRequest;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct CoingeckoConfig {
@@ -29,22 +29,33 @@ impl Manager<CoingeckoCommand> for CoingeckoConfig {
 
             if let Ok(state) = client.coins_list().await {
                 println!("Found {} coins in list", state.len());
-                let req = MarketRequest::new();
-                // TODO the response type of this is shit, it should be something better than this.
-                let state = client.simple_price(req).await.unwrap(); //TODO remove me
+                let req = MarketRequest::new(
+                    String::from("gbp"),
+                    None,
+                    None,
+                    Some(Order::MarketCapDesc),
+                    Some(250),
+                    None,
+                    None,
+                    None,
+                );
 
-                let _ = tx
-                    .send(Command::Discord(DiscordCommand::SendCoingeckoBase(state)))
-                    .await;
+                if let Ok(mut state) = client.markets(req.clone()).await {
+                    let _ = tx
+                        .send(Command::Discord(DiscordCommand::SendCoingeckoBase(state)))
+                        .await;
 
-                loop {
-                    if let Ok(_new_state) = client.simple_price(req).await {
-                        // Compare the states, if any condition to jump is met, send a message to discord
+                    loop {
+                        if let Ok(_new_state) = client.markets(req.clone()).await {
+                            // Compare the states, if any condition to jump is met, send a message to discord
+                        }
+                        tokio::time::sleep(tokio::time::Duration::from_secs(
+                            config_cloned.coingecko.sleep_time_secs,
+                        ))
+                        .await;
                     }
-                    tokio::time::sleep(tokio::time::Duration::from_secs(
-                        config_cloned.coingecko.sleep_time_secs,
-                    ))
-                    .await;
+                } else {
+                    log::error!("Couldnt start Coingecko loop, couldnt get base state.")
                 }
             }
         });

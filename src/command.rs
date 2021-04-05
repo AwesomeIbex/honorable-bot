@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use egg_mode::tweet::Tweet;
-use coingecko_tokio::SimplePrices;
+use coingecko_tokio::Market;
 use serenity::prelude::TypeMapKey;
 
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -18,7 +18,7 @@ pub enum TwitterCommand {
 }
 pub enum DiscordCommand {
     SendTweet(Tweet),
-    SendCoingeckoBase(SimplePrices),
+    SendCoingeckoBase(Vec<Market>),
 }
 pub enum CoingeckoCommand {
 
