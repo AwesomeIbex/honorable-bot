@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Context as AnyhowContext;
 
+use crate::gecko::RuleResult;
 use crate::{
     command::{Command, CommandSender, DiscordCommand, Manager, TwitterCommand},
     Config,
@@ -18,6 +19,7 @@ use serenity::{
     http::Http,
 };
 use tokio::sync::mpsc::{Receiver, Sender};
+use num_format::{Locale, ToFormattedString};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct DiscordConfig {
@@ -58,9 +60,9 @@ async fn add_subscription(ctx: &Context, msg: &Message, mut args: Args) -> Comma
         .expect("Expected CommandSender in TypeMap.");
 
     if let Err(e) =
-        tx.0.send(Command::Twitter(TwitterCommand::AddTwitterSubscription(
-            twitter_handle,
-        )))
+    tx.0.send(Command::Twitter(TwitterCommand::AddTwitterSubscription(
+        twitter_handle,
+    )))
         .await
     {
         log::error!("Failed to send add twitter sub {}", e)
@@ -144,23 +146,28 @@ impl Manager<DiscordCommand> for DiscordConfig {
                             log::error!("Error sending message {}", e)
                         }
                     }
-                    DiscordCommand::SendCoingeckoBase(coins) => {
+                    DiscordCommand::SendCoingeckoBase(mut coins) => {
                         let body = &serde_json::json!({
-                            "content": "",
+                            "content": "```css\n - [Coingecko Bot Started!] Sending top 50 coins.. ```",
                             "type": "article",
-                            "embed": {
-                                "url": "https://coingecko.com",
-                                "title": "Coingecko bot started",
-                                "description": ""
-                            }
                         });
                         let message = http
                             .send_message(config_cloned.discord.channel_id, body)
                             .await;
 
-                        for market in coins {
+                        coins.sort_by(|a, b| a.market_cap_rank.cmp(&b.market_cap_rank));
+
+                        for market in coins.chunks(20).take(10) {
+                            let mut contents = vec!["```css\n".to_string()];
+
+                            market.iter().for_each(|market| {
+                                contents.push(format!("[{}] {} [CURRENT_PRICE] ${} [MARKET_CAP] ${}", market.market_cap_rank, market.id, market.current_price, market.market_cap.to_formatted_string(&Locale::en)))
+                            });
+
+                            contents.push("```".to_string());
+
                             let body = &serde_json::json!({
-                                "content": format!("```css\n - [{}] {}; [CURRENT_PRICE] £{} [MARKET_CAP] {}```", market.market_cap_rank, market.id, market.current_price, market.market_cap),
+                                "content": contents.join("\n"),
                                 "type": "article"
                             });
                             http.send_message(config_cloned.discord.channel_id, body)
@@ -170,48 +177,101 @@ impl Manager<DiscordCommand> for DiscordConfig {
                             log::error!("Error sending coin state {}", e)
                         }
                     }
-                    DiscordCommand::SendCoingeckoPriceIncrease(m) => {
-                        let body = &serde_json::json!({
-                            "content": "",
-                            "type": "article",
-                            "embed": {
-                                "url": "https://coingecko.com",
-                                "title": m.id,
-                                "description": format!("{} raises its market price by at least TODO percent!", m.id),
-                                "image": {
-                                    "height": 150,
-                                    "width": 150,
-                                    "url": m.image
-                                }
+                    // DiscordCommand::SendCoingeckoPriceIncrease(m) => {
+                    //     let body = &serde_json::json!({
+                    //         "content": "",
+                    //         "type": "article",
+                    //         "embed": {
+                    //             "url": "https://coingecko.com",
+                    //             "title": m.id,
+                    //             "description": format!("{} raises its market price by at least TODO percent!", m.id),
+                    //             "image": {
+                    //                 "height": 150,
+                    //                 "width": 150,
+                    //                 "url": m.image
+                    //             }
+                    //         }
+                    //     });
+                    //     let message = http
+                    //         .send_message(config_cloned.discord.channel_id, body)
+                    //         .await;
+                    //     if let Err(e) = message {
+                    //         log::error!("Error sending market increase {}", e)
+                    //     }
+                    // }
+                    // DiscordCommand::SendCoingeckoRankIncrease(m, previous) => {
+                    //     let body = &serde_json::json!({
+                    //         "content": "",
+                    //         "type": "article",
+                    //         "embed": {
+                    //             "url": "https://coingecko.com",
+                    //             "title": m.id,
+                    //             "description": format!("{} has risen up to the rank of {}, previous rank {}", m.id, m.market_cap_rank, previous),
+                    //             "image": {
+                    //                 "height": 150,
+                    //                 "width": 150,
+                    //                 "url": m.image
+                    //             }
+                    //         }
+                    //     });
+                    //     let message = http
+                    //         .send_message(config_cloned.discord.channel_id, body)
+                    //         .await;
+                    //     if let Err(e) = message {
+                    //         log::error!("Error sending market rank increase {}", e)
+                    //     }
+                    // }
+                    DiscordCommand::SendCoingeckoRuleResult(res) => {
+                        let body = match res {
+                            RuleResult::Percent(is_positive, m, diff) => {
+                                let pos_msg = if is_positive {
+                                    "has risen by"
+                                } else {
+                                    "has declined by"
+                                };
+                                serde_json::json!({
+                                    "content": "",
+                                    "type": "article",
+                                    "embed": {
+                                        "url": "https://coingecko.com",
+                                        "title": m.id,
+                                        "description": format!("This crypto {} {}%", pos_msg, diff),
+                                        "image": {
+                                            "height": 150,
+                                            "width": 150,
+                                            "url": m.image
+                                        }
+                                    }
+                                })
                             }
-                        });
+                            RuleResult::Rank(is_positive, m, ranks) => {
+                                let pos_msg = if is_positive {
+                                    "has risen"
+                                } else {
+                                    "has declined"
+                                };
+                                serde_json::json!({
+                                    "content": "",
+                                    "type": "article",
+                                    "embed": {
+                                        "url": "https://coingecko.com",
+                                        "title": m.id,
+                                        "description": format!("{} {} ranks to the rank of {}", pos_msg, ranks, m.market_cap_rank),
+                                        "image": {
+                                            "height": 150,
+                                            "width": 150,
+                                            "url": m.image
+                                        }
+                                    }
+                                })
+                            }
+                        };
+
                         let message = http
-                            .send_message(config_cloned.discord.channel_id, body)
+                            .send_message(config_cloned.discord.channel_id, &body)
                             .await;
                         if let Err(e) = message {
-                            log::error!("Error sending market increase {}", e)
-                        }
-                    }
-                    DiscordCommand::SendCoingeckoRankIncrease(m, previous) => {
-                        let body = &serde_json::json!({
-                            "content": "",
-                            "type": "article",
-                            "embed": {
-                                "url": "https://coingecko.com",
-                                "title": m.id,
-                                "description": format!("{} has risen up to the rank of {}, previous rank {}", m.id, m.market_cap_rank, previous),
-                                "image": {
-                                    "height": 150,
-                                    "width": 150,
-                                    "url": m.image
-                                }
-                            }
-                        });
-                        let message = http
-                            .send_message(config_cloned.discord.channel_id, body)
-                            .await;
-                        if let Err(e) = message {
-                            log::error!("Error sending market rank increase {}", e)
+                            log::error!("Error sending rule result {}", e)
                         }
                     }
                 }

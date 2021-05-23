@@ -4,9 +4,9 @@ use std::{
     sync::Arc,
 };
 
-use gecko::CoingeckoConfig;
-use command::{Command, TwitterCommand, Manager};
+use command::{Command, Manager, TwitterCommand};
 use discord::DiscordConfig;
+use gecko::CoingeckoConfig;
 
 use serde::{Deserialize, Serialize};
 
@@ -15,8 +15,8 @@ use twitter::TwitterConfig;
 
 pub mod command;
 pub mod discord;
-pub mod twitter;
 pub mod gecko;
+pub mod twitter;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Config {
@@ -24,6 +24,7 @@ pub struct Config {
     pub discord: DiscordConfig,
     pub coingecko: CoingeckoConfig,
 }
+
 impl Config {
     fn persist(&self) -> Result<(), anyhow::Error> {
         let mut file = OpenOptions::new()
@@ -42,30 +43,25 @@ impl Config {
     }
 }
 
-/// Then they can just implement a manager interface which has an rx of T and then a tx of command and an arc of config
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     pretty_env_logger::init();
     let config = Config::read()?;
 
-    // Atm this is taking the twitter and not really the generic command system
     let (tx, mut rx): (Sender<Command>, Receiver<Command>) = mpsc::channel(256);
     let (twitter_tx, twitter_rx) = mpsc::channel(64);
     let (discord_tx, discord_rx) = mpsc::channel(256);
     let (_coingecko_tx, coingecko_rx) = mpsc::channel(64);
-    // TODO coingecko manager
 
-
-    config.twitter.start_manager(Arc::clone(&config), twitter_rx, tx.clone());
-    config.discord.start_manager(Arc::clone(&config), discord_rx, tx.clone());
-    config.coingecko.start_manager(Arc::clone(&config), coingecko_rx, tx.clone());
-
-    let _ = twitter_tx
-        .send(TwitterCommand::AddTwitterSubscription(String::from(
-            "Polkadot",
-        )))
-        .await;
-
+    config
+        .twitter
+        .start_manager(Arc::clone(&config), twitter_rx, tx.clone());
+    config
+        .discord
+        .start_manager(Arc::clone(&config), discord_rx, tx.clone());
+    config
+        .coingecko
+        .start_manager(Arc::clone(&config), coingecko_rx, tx.clone());
 
     let _main: Result<(), anyhow::Error> = tokio::spawn(async move {
         while let Some(cmd) = rx.recv().await {
