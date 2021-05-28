@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use twitter::TwitterConfig;
+use crate::command::{DiscordCommand, CoingeckoCommand};
 
 pub mod command;
 pub mod discord;
@@ -49,19 +50,19 @@ async fn main() -> Result<(), anyhow::Error> {
     let config = Config::read()?;
 
     let (tx, mut rx): (Sender<Command>, Receiver<Command>) = mpsc::channel(256);
-    let (twitter_tx, twitter_rx) = mpsc::channel(64);
-    let (discord_tx, discord_rx) = mpsc::channel(256);
-    let (_coingecko_tx, coingecko_rx) = mpsc::channel(64);
+    let (twitter_tx, twitter_rx): (Sender<TwitterCommand>, Receiver<TwitterCommand>) = mpsc::channel(64);
+    let (discord_tx, discord_rx): (Sender<DiscordCommand>, Receiver<DiscordCommand>) = mpsc::channel(256);
+    let (_coingecko_tx, coingecko_rx): (Sender<CoingeckoCommand>, Receiver<CoingeckoCommand>) = mpsc::channel(64);
 
-    config
-        .twitter
-        .start_manager(Arc::clone(&config), twitter_rx, tx.clone());
+    // config
+    //     .twitter
+    //     .start_manager(Arc::clone(&config), twitter_rx, tx.clone());
     config
         .discord
         .start_manager(Arc::clone(&config), discord_rx, tx.clone());
-    config
-        .coingecko
-        .start_manager(Arc::clone(&config), coingecko_rx, tx.clone());
+    // config
+    //     .coingecko
+    //     .start_manager(Arc::clone(&config), coingecko_rx, tx.clone());
 
     let _main: Result<(), anyhow::Error> = tokio::spawn(async move {
         while let Some(cmd) = rx.recv().await {

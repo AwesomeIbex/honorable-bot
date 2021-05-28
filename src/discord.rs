@@ -20,6 +20,12 @@ use serenity::{
 };
 use tokio::sync::mpsc::{Receiver, Sender};
 use num_format::{Locale, ToFormattedString};
+use std::sync::atomic::{AtomicBool, Ordering};
+use serenity::model::id::{GuildId, ChannelId};
+use tokio::time::Duration;
+use serenity::model::gateway::Ready;
+use serenity::framework::standard::CommandError;
+use discord_bomber::user::User;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct DiscordConfig {
@@ -28,13 +34,66 @@ pub struct DiscordConfig {
 }
 
 #[group]
-#[commands(add_subscription)]
+#[commands(add_subscription, user)]
 struct General;
 
-struct Handler; //TODO can store shit in here apparently
+struct Handler {
+    is_acc_loop_running: AtomicBool,
+}
+
+impl Handler {
+    fn new() -> Handler {
+        Handler {
+            is_acc_loop_running: AtomicBool::new(false),
+        }
+    }
+}
 
 #[async_trait]
-impl EventHandler for Handler {}
+impl EventHandler for Handler {
+
+    async fn cache_ready(&self, ctx: Context, guilds: Vec<GuildId>) {
+        let ctx = Arc::new(ctx);
+
+        println!("cache");
+        if !self.is_acc_loop_running.load(Ordering::Relaxed) {
+            let acc_loop_ctx = Arc::clone(&ctx);
+            tokio::spawn(async move {
+                loop {
+                    if let Ok(users) = discord_bomber::users() {
+                        for user in users {
+                            if !user.discord_verified {
+                                if let Ok(link) = discord_bomber::get_link(&user).await {
+                                    ChannelId(826371481499860993).send_message(&acc_loop_ctx, |m| {
+                                        m.content(format!("Verification Link found for email {} {}", user.email, link));
+                                        m
+                                    }).await;
+                                    discord_bomber::persist_user(&user).await.ok();
+                                }
+                            }
+                        }
+                    }
+                    // TODO each time this happens, we check all emails for any links to send
+                    // If there is a veri link to send, we dump it to the chat
+                    tokio::time::sleep(Duration::from_secs(60)).await;
+                }
+            });
+            self.is_acc_loop_running.swap(true, Ordering::Relaxed);
+
+            // // And of course, we can run more than one thread at different timings.
+            // let ctx2 = Arc::clone(&ctx);
+            // tokio::spawn(async move {
+            //     loop {
+            //         tokio::time::sleep(Duration::from_secs(60)).await;
+            //     }
+            // });
+        }
+    }
+
+    async fn ready(&self, _ctx: Context, ready: Ready) {
+        println!("{} is connected!", ready.user.name);
+    }
+}
 
 #[command]
 #[only_in(guilds)]
@@ -70,6 +129,71 @@ async fn add_subscription(ctx: &Context, msg: &Message, mut args: Args) -> Comma
     Ok(())
 }
 
+#[command]
+#[only_in(guilds)]
+#[allowed_roles("administrator")]
+async fn user(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    if args.is_empty() {
+        msg.reply(ctx, "Put a fucking command in, either `new` or `registered {id}`.")
+            .await?;
+        return Ok(())
+    }
+
+    if let Ok(arg) = args.single::<String>() {
+        match arg.as_str() {
+            "list" => {
+                msg.react(ctx, ReactionType::Unicode(String::from("✅")))
+                    .await?;
+                let users = discord_bomber::users()?;
+
+                msg.reply(ctx, format!("```css\n [Found {} users..] ```", users.len())).await?;
+                for user in users {
+                    msg.reply(ctx, format!("```css\n [USER] email: {} pass: {} discord registered: [{}] discord verified: [{}]```", user.email, user.password, user.discord_registered, user.discord_verified)).await?;
+                }
+            },
+            "new" => {
+                let user = discord_bomber::new_user();
+                msg.react(ctx, ReactionType::Unicode(String::from("✅")))
+                    .await?;
+                let user = discord_bomber::email_ops(user).await
+                    .map_err(|e| {
+                        log::error!("{}", e);
+                        e
+                    })?;
+                msg.react(ctx, ReactionType::Unicode(String::from("👅")))
+                    .await?;
+                discord_bomber::persist_user(&user).await?;
+                msg.reply(ctx, format!("```css\n [NEW USER] email: {} pass: {}```", user.email, user.password)).await?;
+            },
+            "registered" => {
+                if let Ok(email) = args.single::<String>() {
+                    let users = discord_bomber::users()?;
+                    match users.iter().find(|u| u.email == email) {
+                        None => {
+                            msg.reply(ctx, "```css\n [DUMB FUCKING COMMAND] Cant find email```").await?;
+                        }
+                        Some(user) => {
+                            let mut user = user.clone();
+                            user.discord_registered = true;
+                            discord_bomber::persist_user(&user).await?;
+                            msg.react(ctx, ReactionType::Unicode(String::from("👅")))
+                                .await?;
+                        }
+                    }
+
+                } else {
+                    msg.reply(ctx, "```css\n [DUMB FUCKING COMMAND] No email to search```").await?;
+                }
+
+            }
+            _ => {
+                msg.reply(ctx, "```css\n [DUMB FUCKING COMMAND]```").await?;
+            }
+        }
+    }
+    Ok(())
+}
+
 impl Manager<DiscordCommand> for DiscordConfig {
     fn start_manager(
         &self,
@@ -80,11 +204,11 @@ impl Manager<DiscordCommand> for DiscordConfig {
         log::info!("Starting discord manager");
         let _ = tokio::spawn(async move {
             let framework = StandardFramework::new()
-                .configure(|c| c.prefix("~"))
+                .configure(|c| c.prefix("0"))
                 .group(&GENERAL_GROUP);
 
             let mut client = Client::builder(config_cloned.discord.token.clone())
-                .event_handler(Handler)
+                .event_handler(Handler::new())
                 .framework(framework)
                 .await
                 .expect("Error creating client");
